@@ -23,7 +23,17 @@ import RefreshToken from './refresh_token.model.js';
 // THIẾT LẬP MỐI QUAN HỆ (ASSOCIATIONS)
 // ==========================================
 
-// --- 1. Cơ sở & Sân (Facilities & Courts) ---
+// --- 1. Người dùng & Phân quyền ---
+User.hasMany(RefreshToken, { foreignKey: 'user_id', as: 'refresh_tokens' });
+RefreshToken.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+User.hasOne(StaffProfile, { foreignKey: 'user_id', as: 'staff_profile' });
+StaffProfile.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+Facility.hasMany(StaffProfile, { foreignKey: 'facility_id', as: 'staff' });
+StaffProfile.belongsTo(Facility, { foreignKey: 'facility_id', as: 'facility' });
+
+// --- 2. Cơ sở, Sân & Giá ---
 Facility.hasMany(Court, { foreignKey: 'facility_id', as: 'courts' });
 Court.belongsTo(Facility, { foreignKey: 'facility_id', as: 'facility' });
 
@@ -40,7 +50,7 @@ Booking.belongsTo(Facility, { foreignKey: 'facility_id', as: 'facility' });
 Booking.hasMany(BookingSlot, { foreignKey: 'booking_id', as: 'slots' });
 BookingSlot.belongsTo(Booking, { foreignKey: 'booking_id', as: 'booking' });
 
-Court.hasMany(BookingSlot, { foreignKey: 'court_id', as: 'booking_slots' });
+Court.hasMany(BookingSlot, { foreignKey: 'court_id', as: 'slots' });
 BookingSlot.belongsTo(Court, { foreignKey: 'court_id', as: 'court' });
 
 // Bổ sung: Booking & PromoCode
@@ -71,7 +81,14 @@ OrderItem.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
 ProductVariant.hasMany(OrderItem, { foreignKey: 'variant_id', as: 'order_items' });
 OrderItem.belongsTo(ProductVariant, { foreignKey: 'variant_id', as: 'variant' });
 
-// --- 5. Tồn Kho (Inventory) ---
+// --- 6. Thanh toán ---
+Booking.hasMany(Payment, { foreignKey: 'booking_id', as: 'payments' });
+Payment.belongsTo(Booking, { foreignKey: 'booking_id', as: 'booking' });
+
+Order.hasMany(Payment, { foreignKey: 'order_id', as: 'payments' });
+Payment.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
+
+// --- 7. Tồn Kho ---
 ProductVariant.hasMany(InventoryLevel, { foreignKey: 'variant_id', as: 'inventory_levels' });
 InventoryLevel.belongsTo(ProductVariant, { foreignKey: 'variant_id', as: 'variant' });
 

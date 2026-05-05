@@ -19,13 +19,25 @@ import CheckoutScreen from '../../shop/screens/CheckoutScreen';
 
 import AccountScreen from '../../account/screens/AccountScreen';
 import NotificationsScreen from '../../account/screens/NotificationsScreen';
+import PaymentWebView from '../components/PaymentWebView';
+
+import { useAppStore } from '../../data/AppStore';
+import LoginScreen from '../../account/screens/LoginScreen';
 
 const Tab = createBottomTabNavigator();
-
 const HomeStack = createStackNavigator();
 const BookingStack = createStackNavigator();
 const ShopStack = createStackNavigator();
 const AccountStack = createStackNavigator();
+const AuthStack = createStackNavigator();
+
+function AuthStackScreen() {
+  return (
+    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+      <AuthStack.Screen name="Login" component={LoginScreen} />
+    </AuthStack.Navigator>
+  );
+}
 
 function HomeStackScreen() {
   return (
@@ -44,6 +56,7 @@ function BookingStackScreen() {
       <BookingStack.Screen name="MyBookings" component={MyBookingsScreen} />
       <BookingStack.Screen name="BookingDetail" component={BookingDetailScreen} />
       <BookingStack.Screen name="BookingConfirm" component={BookingConfirmScreen} />
+      <BookingStack.Screen name="PaymentWebView" component={PaymentWebView} />
     </BookingStack.Navigator>
   );
 }
@@ -55,6 +68,7 @@ function ShopStackScreen() {
       <ShopStack.Screen name="ProductDetail" component={ProductDetailScreen} />
       <ShopStack.Screen name="Cart" component={CartScreen} />
       <ShopStack.Screen name="Checkout" component={CheckoutScreen} />
+      <ShopStack.Screen name="PaymentWebView" component={PaymentWebView} />
     </ShopStack.Navigator>
   );
 }
@@ -78,8 +92,15 @@ const TABS = [
 ];
 
 export default function AppNavigator() {
+  const { user, loading } = useAppStore();
   const insets = useSafeAreaInsets();
   const tabBarHeight = 60 + insets.bottom;
+
+  if (loading) return null;
+
+  if (!user) {
+    return <AuthStackScreen />;
+  }
 
   return (
     <Tab.Navigator
@@ -99,7 +120,7 @@ export default function AppNavigator() {
         tabBarLabelStyle: { fontSize: fontSize.xs, fontWeight: fontWeight.medium },
         tabBarIcon: ({ focused, color, size }) => {
           const config = TABS.find((t) => t.name === route.name);
-          const iconName = focused ? config.icon : `${config.icon}-outline`;
+          const iconName = config ? (focused ? config.icon : `${config.icon}-outline`) : 'alert';
           return <Ionicons name={iconName} size={size} color={color} />;
         },
       })}
@@ -115,4 +136,3 @@ export default function AppNavigator() {
     </Tab.Navigator>
   );
 }
-

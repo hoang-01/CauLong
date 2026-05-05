@@ -1,29 +1,76 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import React, { useMemo, useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import Screen from '../../shared/components/Screen';
 import { colors, spacing, fontSize, fontWeight, borderRadius, shadow } from '../../theme';
 import { getBookings, getCurrentUser } from '../../data/mockStore';
 import BookingCard from '../../shared/components/BookingCard';
 
+import { Ionicons } from '@expo/vector-icons';
+
 export default function MyBookingsScreen({ navigation }) {
-  const user = getCurrentUser();
-  const bookings = getBookings(user?.id);
+  const [loading, setLoading] = useState(true);
+  const [bookings, setBookings] = useState([]);
   const [tab, setTab] = useState('upcoming'); // upcoming | past | cancelled
+
+  useEffect(() => {
+    async function loadBookings() {
+        try {
+            const user = await getCurrentUser();
+            if (user) {
+                const res = await getBookings(user.id);
+                setBookings(res);
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    }
+    loadBookings();
+  }, []);
 
   const data = useMemo(() => {
     const now = new Date();
-    const parse = (b) => new Date(String(b?.start_at ?? b?.date ?? ''));
+    const parse = (b) => {
+        const dStr = b?.start_at ?? b?.date ?? '';
+        return dStr ? new Date(dStr) : new Date(0);
+    };
 
     if (tab === 'cancelled') return bookings.filter((b) => b.status === 'cancelled');
     if (tab === 'past') return bookings.filter((b) => parse(b) < now && b.status !== 'cancelled');
     return bookings.filter((b) => parse(b) >= now && b.status !== 'cancelled');
   }, [bookings, tab]);
 
+  if (loading) {
+      return (
+          <Screen>
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+              </View>
+          </Screen>
+      );
+  }
+
   return (
     <Screen>
       <View style={styles.header}>
-        <Text style={styles.title}>Lịch sử đặt sân</Text>
-        <Text style={styles.sub}>Demo mock</Text>
+        <TouchableOpacity 
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Booking');
+            }
+          }} 
+          activeOpacity={0.8} 
+          style={styles.backBtn}
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <View>
+          <Text style={styles.title}>Lịch sử đặt sân</Text>
+          <Text style={styles.sub}>Quản lý các buổi tập của bạn</Text>
+        </View>
       </View>
 
       <View style={styles.tabs}>
@@ -63,7 +110,18 @@ function TabButton({ label, active, onPress }) {
 }
 
 const styles = StyleSheet.create({
-  header: { marginBottom: spacing.md },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   title: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.textPrimary },
   sub: { marginTop: 4, fontSize: fontSize.sm, color: colors.textMuted },
   tabs: {

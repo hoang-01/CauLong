@@ -1,12 +1,18 @@
 import { Router } from "express";
+
+// --- CLIENT IMPORTS ---
 import clientAuthRouter from "./client/auth.routes.js";
+import clientFacilityRouter from "./client/facility.routes.js";
+import clientProductRouter from "./client/product.routes.js";
+import clientOrderRouter from "./client/order.routes.js";    
+import clientBookingRouter from './client/booking.route.js'; 
+
+// --- ADMIN IMPORTS ---
 import adminAuthRouter from "./admin/auth.routes.js";
 import adminFacilityRouter from "./admin/facility.route.js";
 import adminCourtRouter from "./admin/court.route.js";
-import clientBookingRouter from './client/booking.route.js'
-import adminBookingRouter from './admin/booking.route.js'
-import priceConfigRouter from './admin/price_config.route.js'
-
+import adminBookingRouter from './admin/booking.route.js';
+import priceConfigRouter from './admin/price_config.route.js';
 
 const rootRouter = Router();
 
@@ -16,6 +22,11 @@ const rootRouter = Router();
 // ==========================================
 rootRouter.use('/app/auth', clientAuthRouter);
 rootRouter.use('/app/bookings', clientBookingRouter);
+
+// Tích hợp thêm các route mới của đồng đội
+rootRouter.use('/app/facilities', clientFacilityRouter);
+rootRouter.use('/app/products', clientProductRouter);
+rootRouter.use('/app/orders', clientOrderRouter);
 
 
 // ==========================================

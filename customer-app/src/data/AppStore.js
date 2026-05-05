@@ -1,13 +1,7 @@
-import React, { createContext, useContext, useMemo, useReducer } from 'react';
+import React, { createContext, useContext, useMemo, useReducer, useState, useEffect } from 'react';
 import mock from './mock.json';
 
 const AppStoreContext = createContext(null);
-
-function createInitialState() {
-  return {
-    cartItems: (mock.cart_items ?? []).map((it) => ({ ...it })),
-  };
-}
 
 function reducer(state, action) {
   switch (action.type) {
@@ -53,15 +47,51 @@ function reducer(state, action) {
     case 'cart/clear': {
       return { ...state, cartItems: [] };
     }
+    case 'cart/init': {
+      return { ...state, cartItems: action.payload };
+    }
     default:
       return state;
   }
 }
 
 export function AppStoreProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
+  const [state, dispatch] = useReducer(reducer, { cartItems: [] });
+  const [loading, setLoading] = useState(true);
+  const [user, setUserState] = useState(null);
 
-  const api = useMemo(() => {
+  useEffect(() => {
+    async function init() {
+      try {
+        // Khởi tạo giỏ hàng trống để bắt đầu fresh
+        dispatch({ type: 'cart/init', payload: [] });
+        
+        // Tương lai: Kiểm tra token trong AsyncStorage để tự động đăng nhập
+      } finally {
+        setLoading(false);
+      }
+    }
+    init();
+  }, []);
+
+  const setUser = (userData, token) => {
+    setUserState(userData);
+    if (token) {
+      // Cập nhật token cho axios instance
+      import('../services/api').then((m) => {
+          m.default.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      });
+    }
+  };
+
+  const logout = () => {
+    setUserState(null);
+    import('../services/api').then((m) => {
+        delete m.default.defaults.headers.common['Authorization'];
+    });
+  };
+
+  const apiContent = useMemo(() => {
     const addToCart = (product, variant, quantity = 1) =>
       dispatch({ type: 'cart/add', payload: { product, variant, quantity } });
 
@@ -74,10 +104,11 @@ export function AppStoreProvider({ children }) {
     const clearCart = () =>
       dispatch({ type: 'cart/clear', payload: {} });
 
-    return { state, addToCart, setCartQty, removeFromCart, clearCart };
-  }, [state]);
+    return { state, addToCart, setCartQty, removeFromCart, clearCart, loading, user, setUser, logout };
+  }, [state, loading, user]);
 
-  return <AppStoreContext.Provider value={api}>{children}</AppStoreContext.Provider>;
+  return <AppStoreContext.Provider value={apiContent}>{children}</AppStoreContext.Provider>;
+
 }
 
 export function useAppStore() {
@@ -85,4 +116,3 @@ export function useAppStore() {
   if (!ctx) throw new Error('useAppStore must be used within AppStoreProvider');
   return ctx;
 }
-

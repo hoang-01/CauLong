@@ -225,6 +225,28 @@ export class BookingService {
         }
     }
 
+    static async getMyBookings(userId: number) {
+        const bookings = await (models.Booking as any).findAll({
+            where: { user_id: userId },
+            include: [
+                { model: models.Facility, as: 'facility' },
+                { 
+                    model: models.BookingSlot, 
+                    as: 'slots',
+                    include: [
+                        { 
+                            model: models.Court, 
+                            as: 'court'
+                        }
+                    ]
+                }
+            ],
+            order: [['created_at', 'DESC']]
+        });
+        
+        return bookings;
+    }
+
     static async getAllBookings(facilityId?: number) {
         const whereCondition: any = {};
 
