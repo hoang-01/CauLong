@@ -245,7 +245,7 @@ export class BookingService {
                 user_id: userId,
                 facility_id: data.facility_id,
                 total_cents: calculatedPrice,
-                status: 'pending',
+                payment_method: data.payment_method || 'cash',
             }, { transaction: t });
 
             await models.BookingSlot.create({
@@ -301,7 +301,7 @@ export class BookingService {
                 {
                     model: models.User,
                     as: 'user',
-                    attributes: ['id', 'email', 'phone']
+                    attributes: ['id', 'email', 'phone', 'full_name']
                 },
                 {
                     model: models.Facility,

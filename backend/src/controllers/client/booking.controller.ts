@@ -3,10 +3,11 @@ import customParseFormat from 'dayjs/plugin/customParseFormat.js';
 import AppResponse from '../../utils/AppResponse.js';
 import ApiError from '../../utils/ErrorClass.js';
 import type { Request, Response, NextFunction } from 'express';
-import type { CheckAvailabilityQuery, CreateBookingInput } from '../../validations/booking.validation.js';
+import type { CheckAvailabilityQuery, CreateBookingInput, PreviewPriceInput } from '../../validations/booking.validation.js';
 import { BookingService } from '../../services/booking.service.js';
 import { VNPayUtils } from '../../utils/vnpay.js';
 import models from '../../models/index.js';
+import { PricingService } from '../../services/pricing.service.js';
 
 dayjs.extend(customParseFormat);
 
@@ -60,7 +61,40 @@ export class ClientBookingController {
             next(error);
         }
     }
+    static async previewPrice(req: Request, res: Response, next: NextFunction) {
+        try {
+            const body = req.body as PreviewPriceInput;
 
+            // 1. Kiểm tra logic giờ cơ bản (tránh trường hợp start > end)
+            if (body.start_time >= body.end_time) {
+                throw new ApiError('Giờ kết thúc phải lớn hơn giờ bắt đầu', 400);
+            }
+
+            // 2. Ghép ngày và giờ lại thành Object Date chuẩn
+            const startDateTime = dayjs(`${body.date} ${body.start_time}`, 'YYYY-MM-DD HH:mm').toDate();
+            const endDateTime = dayjs(`${body.date} ${body.end_time}`, 'YYYY-MM-DD HH:mm').toDate();
+
+            // 3. Gọi Service để tính tiền
+            const totalPrice = await PricingService.calculateTotalPrice(
+                body.facility_id, 
+                body.court_type, 
+                startDateTime, 
+                endDateTime
+            );
+
+            // 4. Trả về kết quả cho Frontend
+            return AppResponse.success(
+                res, 
+                { total_cents: totalPrice }, 
+                'Tính toán giá thành công', 
+                200
+            );
+
+        } catch (error) {
+            next(error);
+        }
+    }
+    
     static async createBooking(req: any, res: Response, next: NextFunction) {
         try {
             const body = req.body as CreateBookingInput;
