@@ -35,15 +35,21 @@ export class AdminBookingController {
         try {
             const body = req.body as CreateBookingByHotlineInput;
             
-            const { customer_phone, ...bookingData } = body;
+            const {customer_phone, customer_name, ...bookingData } = body;
 
             // 1. Tìm user qua SĐT
             let user = await UserService.getUserByPhone(customer_phone);
             if (!user) {
-                user = await UserService.createGuestUser(customer_phone);
+                user = await UserService.createGuestUser(customer_phone, customer_name as string);
             }
 
-            const result = await BookingService.createBooking(user.id, bookingData);
+            const payloadToService = {
+                ...bookingData,
+                status: 'confirmed' as const,
+                payment_method: 'cash' as const,
+            };
+
+            const result = await BookingService.createBooking(user.id, payloadToService);
 
            return AppResponse.success(
                 res, 
