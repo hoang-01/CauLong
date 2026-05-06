@@ -37,7 +37,7 @@ InventoryLevel.init(
     updatedAt: 'updated_at',
     indexes: [
       // Đảm bảo mỗi variant chỉ có 1 bản ghi tồn kho tại mỗi kho
-      { unique: true, fields: ['variant_id', 'warehouse_id'] },
+      { unique: true, fields: ['variant_id', 'facility_id'] },
     ],
   }
 );
