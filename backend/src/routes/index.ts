@@ -12,6 +12,7 @@ import adminAuthRouter from "./admin/auth.routes.js";
 import adminFacilityRouter from "./admin/facility.route.js";
 import adminCourtRouter from "./admin/court.route.js";
 import adminBookingRouter from './admin/booking.route.js';
+import adminUserRouter from './admin/user.routes.js';
 import priceConfigRouter from './admin/price_config.route.js';
 import clientPaymentRouter from './client/payment.route.js';
 
@@ -43,5 +44,6 @@ rootRouter.use('/admin/facilities', adminFacilityRouter);
 rootRouter.use('/admin/courts', adminCourtRouter);
 rootRouter.use('/admin/bookings', adminBookingRouter);
 rootRouter.use('/admin/price-configs', priceConfigRouter);
+rootRouter.use('/admin/users', adminUserRouter);
 
 export default rootRouter;
