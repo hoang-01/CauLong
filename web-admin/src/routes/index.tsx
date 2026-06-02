@@ -6,12 +6,12 @@ import BookingSchedulePage from '../features/booking/components/BookingScheduleP
 import { StaffPage } from '../features/staff/components/StaffPage';
 import { ProductTable } from '../features/product/components/ProductTable';
 import PosPage from '../features/sale/components/PosPage';
+import FacilityPage from '../features/facility/components/FacilityPage';
+import CourtPage from '../features/court/components/CourtPage';
+import PriceConfigPage from '../features/priceConfig/components/PriceConfigPage';
 
 // --- TẠM THỜI MOCK CÁC COMPONENT ĐỂ TEST UI ---
 const DashboardPage = () => <div className="p-4 font-semibold text-lg text-gray-700">Trang Tổng quan (Thống kê doanh thu)</div>;
-const FacilityListPage = () => <div className="p-4 font-semibold text-lg text-gray-700">Trang Quản lý Cơ sở (Chi nhánh)</div>;
-const CourtListPage = () => <div className="p-4 font-semibold text-lg text-gray-700">Trang Quản lý Sân (Badminton, Tennis...)</div>;
-const PricingPage = () => <div className="p-4 font-semibold text-lg text-gray-700">Trang Cấu hình Bảng giá</div>;
 
 export const router = createBrowserRouter([
   {
@@ -56,11 +56,11 @@ export const router = createBrowserRouter([
           },
           {
             path: 'branches',
-            element: <FacilityListPage />,
+            element: <FacilityPage />,
           },
           {
             path: 'courts',
-            element: <CourtListPage />,
+            element: <CourtPage />,
           },
         ]
       },
@@ -73,7 +73,7 @@ export const router = createBrowserRouter([
       // 3. CÁC MODULE ĐỘC LẬP
       {
         path: 'pricing',
-        element: <PricingPage />,
+        element: <PriceConfigPage />,
       },
       {
         path: 'products',

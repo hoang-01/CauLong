@@ -32,6 +32,8 @@ const AdminLayout: React.FC = () => {
     navigate('/login');
   };
 
+  const isAdmin = user?.role === 'admin';
+
   const menuItems = [
     { key: '/', icon: <DashboardOutlined />, label: 'Tổng quan' },
     
@@ -47,7 +49,7 @@ const AdminLayout: React.FC = () => {
     },
 
     // NHÓM CƠ SỞ VẬT CHẤT & GIÁ (Chỉ Admin mới thấy - Em có thể check role ở đây sau)
-    {
+    ...(isAdmin ? [{
       key: '/facility-management',
       icon: <AppstoreOutlined />,
       label: 'Cơ sở & Sân',
@@ -56,7 +58,7 @@ const AdminLayout: React.FC = () => {
         { key: '/facility/courts', label: 'Quản lý Sân' },
         { key: '/pricing', label: 'Cấu hình bảng giá' },
       ]
-    },
+    }] : []),
 
     // CÁC MODULE KHÁC
     // 👇 THÊM TRANG BÁN HÀNG VÀO ĐÂY 👇
