@@ -68,8 +68,23 @@ export class InventoryService {
      */
     static async getLevelsByFacility(facilityId: number) {
         return await (models.InventoryLevel as any).findAll({
-            where: { facility_id: facilityId },
-            include: [{ model: models.ProductVariant, as: 'variant' }]
+            where: {
+                facility_id: facilityId
+            },
+
+            include: [
+            {
+                model: models.ProductVariant,
+                as: "variant",
+
+                include: [
+                {
+                    model: models.Product,
+                    as: "product"
+                }
+                ]
+            }
+            ]
         });
     }
 

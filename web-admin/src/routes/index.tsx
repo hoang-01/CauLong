@@ -5,6 +5,7 @@ import BookingPage from '../features/booking/components/BookingPage'; // Trang T
 import BookingSchedulePage from '../features/booking/components/BookingSchedulePage';
 import { StaffPage } from '../features/staff/components/StaffPage';
 import { ProductTable } from '../features/product/components/ProductTable';
+import PosPage from '../features/sale/components/PosPage';
 
 // --- TẠM THỜI MOCK CÁC COMPONENT ĐỂ TEST UI ---
 const DashboardPage = () => <div className="p-4 font-semibold text-lg text-gray-700">Trang Tổng quan (Thống kê doanh thu)</div>;
@@ -62,6 +63,11 @@ export const router = createBrowserRouter([
             element: <CourtListPage />,
           },
         ]
+      },
+
+      {
+        path: 'pos',
+        element: <PosPage />,
       },
 
       // 3. CÁC MODULE ĐỘC LẬP

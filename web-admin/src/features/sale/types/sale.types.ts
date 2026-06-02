@@ -1,32 +1,59 @@
-export interface PosVariant {
-  id: number;
-  sku: string;
-  price_cents: number;
-  attributes: Record<string, any>;
-  inventory_level?: {
-    quantity_on_hand: number;
-  };
-}
-
 export interface PosProduct {
   id: number;
-  name: string;
-  thumbnail_url: string | null;
-  variants: PosVariant[];
+  quantity_on_hand: number;
+
+  variant: {
+    id: number;
+    sku: string;
+    price_cents: number;
+
+    attributes: Record<
+      string,
+      string
+    >;
+
+    product: {
+      id: number;
+      name: string;
+      category: string;
+      thumbnail_url: string | null;
+    };
+  };
 }
 
 export interface CartItem {
   variantId: number;
+
   productId: number;
+
   name: string;
+
   sku: string;
+
   price: number;
+
+  stock: number;
+
   quantity: number;
-  maxQuantity: number; // Tồn kho tối đa
+
+  attributes?: Record<string, string>;
+}
+
+export interface Facility {
+  id: number;
+  name: string;
+  address: string;
 }
 
 export interface CreateOrderPayload {
-  facility_id: number;
-  payment_method: 'cash' | 'vnpay';
-  items: { variant_id: number; quantity: number }[];
+  facilityId: number;
+
+  paymentMethod: string;
+
+  note?: string;
+
+  items: {
+    variantId: number;
+    quantity: number;
+  }[];
 }

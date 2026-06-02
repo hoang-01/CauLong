@@ -1,16 +1,43 @@
-// src/features/pos/services/pos.service.ts
-import axiosClient from '../../../config/axios';
-import type { ApiResponse } from '../types/sale.types';
-import type { PosProduct, CreateOrderPayload } from '../types/sale.types';
+import axiosClient from "../../../config/axios";
+
+import type {
+  PosProduct,
+  Facility,
+  CreateOrderPayload,
+} from "../types/sale.types";
 
 export const PosService = {
-  // Lấy sản phẩm kèm tồn kho theo cơ sở (Facility)
-  getProductsByFacility: async (facilityId: number) => {
-    return await axiosClient.get<any, ApiResponse<PosProduct[]>>(`/inventory/facility/${facilityId}`);
+  // Danh sách cơ sở
+  getFacilities: async () => {
+    return axiosClient.get<Facility[]>(
+      "/admin/facilities"
+    );
   },
 
-  // Tạo đơn hàng mới
-  createOrder: async (payload: CreateOrderPayload) => {
-    return await axiosClient.post<any, ApiResponse<any>>('/orders', payload);
-  }
+  // Variant của sản phẩm
+  getVariants: async (
+    productId: number
+  ) => {
+    return axiosClient.get(
+      `/admin/products/${productId}/variants`
+    );
+  },
+
+  // Tồn kho theo cơ sở
+  getProductsByFacility: async (
+    facilityId: number
+  ) => {
+    return axiosClient.get<PosProduct[]>(
+      `/admin/inventory/facility/${facilityId}`
+    );
+  },
+
+  createOrder: async (
+    payload: CreateOrderPayload
+  ) => {
+    return axiosClient.post(
+      "/app/orders",
+      payload
+    );
+  },
 };

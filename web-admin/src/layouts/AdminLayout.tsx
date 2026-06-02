@@ -9,7 +9,8 @@ import {
   MenuUnfoldOutlined,
   AppstoreOutlined,
   SettingOutlined,
-  CalendarOutlined
+  CalendarOutlined,
+  ShoppingCartOutlined // <-- THÊM ICON NÀY CHO POS
 } from '@ant-design/icons';
 import { useAuthStore } from '../features/auth/store/auth.store';
 
@@ -58,6 +59,8 @@ const AdminLayout: React.FC = () => {
     },
 
     // CÁC MODULE KHÁC
+    // 👇 THÊM TRANG BÁN HÀNG VÀO ĐÂY 👇
+    { key: '/pos', icon: <ShoppingCartOutlined />, label: 'Bán hàng (POS)' }, 
     { key: '/products', icon: <SettingOutlined />, label: 'Hàng hóa & Kho' },
     { key: '/staff', icon: <UserOutlined />, label: 'Nhân viên' },
   ];

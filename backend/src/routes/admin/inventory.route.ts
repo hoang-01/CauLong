@@ -10,8 +10,6 @@ import {
 import { requireRoles } from '../../middlewares/role.middleware.js';
 import { verifyToken } from '../../middlewares/auth.middleware.js';
 
-
-
 const router = Router();
 router.use(verifyToken);
 
