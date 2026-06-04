@@ -25,6 +25,7 @@ import PaymentWebView from '../components/PaymentWebView';
 
 import { useAppStore } from '../../data/AppStore';
 import LoginScreen from '../../account/screens/LoginScreen';
+import RegisterScreen from '../../account/screens/RegisterScreen';
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createStackNavigator();
@@ -37,6 +38,7 @@ function AuthStackScreen() {
   return (
     <AuthStack.Navigator screenOptions={{ headerShown: false }}>
       <AuthStack.Screen name="Login" component={LoginScreen} />
+      <AuthStack.Screen name="Register" component={RegisterScreen} />
     </AuthStack.Navigator>
   );
 }

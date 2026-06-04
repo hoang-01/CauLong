@@ -6,7 +6,7 @@ import jwt, { type SignOptions } from 'jsonwebtoken';
 
 export class AuthService {
     static async register(data: any) {
-        const { email, password, phone } = data;
+        const { name, email, password, phone } = data;
 
         const existingUser = await models.User.findOne({ where: { email } });
         if (existingUser) {
@@ -17,14 +17,30 @@ export class AuthService {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const newUser = await models.User.create({
+            full_name: name,
             email,
             phone,
             password_hash: hashedPassword,
             role: 'customer' 
         });
 
+        // Tạo Token ngay sau khi đăng ký thành công
+        const payload = { id: newUser.id, role: newUser.role };
+        const secret = process.env.JWT_SECRET;
+        const expiresInEnv = process.env.JWT_EXPIRES_IN;
+
+        if (!secret || !expiresInEnv) {
+            throw new ApiError('Lỗi cấu hình hệ thống: Thiếu JWT_SECRET hoặc JWT_EXPIRES_IN', 500);
+        }
+
+        const signOptions: SignOptions = {
+            expiresIn: expiresInEnv as NonNullable<SignOptions['expiresIn']>
+        }; 
+
+        const token = jwt.sign(payload, secret, signOptions);
         const { password_hash, ...userWithoutPassword } = newUser.toJSON();
-        return userWithoutPassword;
+
+        return { user: userWithoutPassword, token };
     }
 
     static async login(data: any, allowedRoles: string[]) {

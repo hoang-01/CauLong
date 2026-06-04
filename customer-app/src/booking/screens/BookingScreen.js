@@ -1,18 +1,23 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground, ActivityIndicator } from 'react-native';
+import dayjs from 'dayjs';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground, ActivityIndicator, Alert, Modal, FlatList, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Screen from '../../shared/components/Screen';
 import { colors, spacing, fontSize, fontWeight, borderRadius, shadow } from '../../theme';
-import { getAvailabilitiesFor, getFacilities, getCourtTypes } from '../../data/mockStore';
+import { getAvailableCourts, getFacilities, getCourtTypes } from '../../data/mockStore';
 import Button from '../../shared/components/Button';
 import { formatPrice } from '../../utils/formatters';
 import PressableCard from '../../shared/components/PressableCard';
-import { autoAssignCourt } from '../utils/autoAssignCourt';
+import { useAppStore } from '../../data/AppStore';
+
+const { width: windowWidth } = Dimensions.get('window');
 
 export default function BookingScreen({ navigation }) {
+  const { selectedFacility: globalFacility, setFacility: setGlobalFacility } = useAppStore();
   const [loading, setLoading] = useState(true);
   const [facilities, setFacilities] = useState([]);
   const [courtTypes, setCourtTypes] = useState([]);
+  
   const [dateOptions] = useState(() => {
     const base = new Date();
     base.setHours(0, 0, 0, 0);
@@ -29,21 +34,41 @@ export default function BookingScreen({ navigation }) {
     });
   });
 
-  const [facilityId, setFacilityId] = useState(null);
-  const [sportId, setSportId] = useState(null);
   const [dateId, setDateId] = useState(dateOptions[0]?.id ?? null);
   
-  const [courts, setCourts] = useState([]);
-  const [slotsByCourtId, setSlotsByCourtId] = useState({});
+  const [facilityId, setFacilityId] = useState(globalFacility?.id || null);
+  const [sportId, setSportId] = useState(null);
+  
+  const [startTime, setStartTime] = useState('08:00');
+  const [endTime, setEndTime] = useState('09:00');
+  const [availableCourts, setAvailableCourts] = useState([]);
+  const [selectedCourtId, setSelectedCourtId] = useState(null);
+  const [searchError, setSearchError] = useState('');
+  const [showTimePicker, setShowTimePicker] = useState(null); // 'start', 'end' or null
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const timeOptions = useMemo(() => {
+    const options = [];
+    for (let h = 6; h <= 21; h++) {
+      options.push(`${h.toString().padStart(2, '0')}:00`);
+      options.push(`${h.toString().padStart(2, '0')}:30`);
+    }
+    options.push('22:00');
+    return options;
+  }, []);
 
   useEffect(() => {
     async function loadInitial() {
       try {
-        const [f, ct] = await Promise.all([getFacilities(), getCourtTypes()]);
+        const f = await getFacilities();
         setFacilities(f);
-        setCourtTypes(ct);
-        if (f.length > 0) setFacilityId(f[0].id);
-        if (ct.length > 0) setSportId(ct[0].id);
+        
+        if (!facilityId && f.length > 0) {
+            const initialId = globalFacility?.id || f[0].id;
+            const initialF = f.find(item => item.id === initialId) || f[0];
+            setFacilityId(initialF.id);
+            setGlobalFacility(initialF);
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -54,24 +79,111 @@ export default function BookingScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
+    async function loadSports() {
+        if (!facilityId) return;
+        try {
+            const ct = await getCourtTypes(facilityId);
+            setCourtTypes(ct);
+            
+            // Reset bộ môn & sân khi đổi cơ sở — bắt buộc user chọn lại
+            setSportId(null);
+            setAvailableCourts([]);
+            setSelectedCourtId(null);
+            setSearchError('');
+        } catch (e) {
+            console.error(e);
+        }
+    }
+    loadSports();
+  }, [facilityId]);
+
+  // Khi facilityId thay đổi locally, cập nhật global
+  const handleFacilityChange = (f) => {
+    // Reset ngay lập tức để tránh race condition với useEffect loadAvailability
+    setSportId(null);
+    setAvailableCourts([]);
+    setSelectedCourtId(null);
+    setSearchError('');
+    
+    setFacilityId(f.id);
+    setGlobalFacility(f);
+    
+    // Kiểm tra giờ hoạt động của cơ sở mới
+    const openTime = f.open_time || '06:00:00';
+    const closeTime = f.close_time || '22:00:00';
+    const openHHmm = openTime.substring(0, 5);
+    const closeHHmm = closeTime.substring(0, 5);
+
+    if (startTime < openHHmm || startTime > closeHHmm) {
+       setStartTime(openHHmm);
+       // Đẩy giờ kết thúc lên +1h
+       const [h, m] = openHHmm.split(':');
+       const nextHour = (parseInt(h) + 1).toString().padStart(2, '0');
+       setEndTime(`${nextHour}:${m}`);
+    }
+  };
+
+  useEffect(() => {
     async function loadAvailability() {
-      if (!facilityId || !sportId || !dateId) return;
+      if (!facilityId || !sportId || !dateId || !startTime || !endTime) return;
+
+      const currentSport = courtTypes.find(s => s.id === sportId);
+      if (!currentSport) return;
+      
+      const startObj = new Date(`${dateId}T${startTime}:00`);
+      const endObj = new Date(`${dateId}T${endTime}:00`);
+      const now = new Date();
+
+      if (startObj < now) {
+          setSearchError('Không thể chọn giờ trong quá khứ');
+          setAvailableCourts([]);
+          return;
+      }
+      
+      if (endObj <= startObj) {
+          setSearchError('Giờ kết thúc phải sau giờ bắt đầu');
+          setAvailableCourts([]);
+          return;
+      }
+
+      const diffMins = (endObj - startObj) / (1000 * 60);
+      if (diffMins < 60) {
+          setSearchError('Thời lượng tối thiểu là 1 tiếng');
+          setAvailableCourts([]);
+          return;
+      }
+
+      setSearchError('');
       try {
-        const res = await getAvailabilitiesFor({ facilityId, courtTypeId: sportId, date: dateId });
-        setCourts(res.courts || []);
-        setSlotsByCourtId(res.slotsByCourtId || {});
+        const res = await getAvailableCourts({ 
+            facilityId, 
+            courtType: currentSport.name, // Truyền tên bộ môn thay vì ID
+            date: dateId,
+            startTime,
+            endTime
+        });
+        setAvailableCourts(res || []);
+        if (res.length > 0) {
+            if (!res.find(c => c.id === selectedCourtId)) {
+                setSelectedCourtId(res[0].id);
+            }
+        } else {
+            setSelectedCourtId(null);
+        }
       } catch (e) {
         console.error(e);
+        setAvailableCourts([]);
       }
     }
     loadAvailability();
-  }, [facilityId, sportId, dateId]);
+  }, [facilityId, sportId, dateId, startTime, endTime, courtTypes]);
 
   const sportImages = useMemo(
     () => ({
-      badminton: require('../../image/1.jpg'),
-      tennis: require('../../image/2.jpg'),
-      table_tennis: require('../../image/3.jpg'),
+      badminton: require('../../image/badminton.jpg'),
+      tennis: require('../../image/tennis.jpg'),
+      football: require('../../image/football.jpg'),
+      table_tennis: require('../../image/table_tennis.jpg'),
     }),
     []
   );
@@ -79,80 +191,17 @@ export default function BookingScreen({ navigation }) {
   const selectedFacility = useMemo(() => facilities.find((f) => f.id === facilityId) ?? facilities[0], [facilities, facilityId]);
   const selectedSport = useMemo(() => courtTypes.find((s) => s.id === sportId) ?? courtTypes[0], [courtTypes, sportId]);
 
-  const [selectedKeys, setSelectedKeys] = useState(() => new Set());
-  const [selectionNote, setSelectionNote] = useState('');
-
-  const allKeys = useMemo(() => {
-    const set = new Set();
-    Object.values(slotsByCourtId).forEach((slots) => {
-      (slots ?? []).forEach((s) => set.add(`${s.start}-${s.end}`));
-    });
-    const keys = Array.from(set);
-    keys.sort((a, b) => a.localeCompare(b));
-    return keys;
-  }, [slotsByCourtId]);
-
-  const availabilityCountByKey = useMemo(() => {
-    const map = new Map();
-    for (const key of allKeys) {
-      let count = 0;
-      for (const c of courts) {
-        const slots = slotsByCourtId[c.id] ?? [];
-        const slot = slots.find((s) => `${s.start}-${s.end}` === key);
-        if (slot?.available) count += 1;
-      }
-      map.set(key, count);
-    }
-    return map;
-  }, [allKeys, courts, slotsByCourtId]);
-
-  const desiredKeys = useMemo(() => {
-    const arr = Array.from(selectedKeys);
-    arr.sort((a, b) => a.localeCompare(b));
-    return arr;
-  }, [selectedKeys]);
-
-  const assignment = useMemo(() => {
-    if (!desiredKeys.length) return null;
-    return autoAssignCourt({ courts, slotsByCourtId, desiredKeys });
-  }, [courts, slotsByCourtId, desiredKeys]);
-
-  const totalPrice = assignment?.total_cents ?? 0;
-  const hours = desiredKeys.length;
-
-  const toggleKey = (key) => {
-    setSelectedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-        setSelectionNote('');
-        return next;
-      }
-
-      const idx = allKeys.indexOf(key);
-      if (idx < 0) return next;
-
-      if (next.size === 0) {
-        next.add(key);
-        setSelectionNote('');
-        return next;
-      }
-
-      const indices = Array.from(next).map((k) => allKeys.indexOf(k)).filter((n) => n >= 0);
-      const min = Math.min(...indices);
-      const max = Math.max(...indices);
-      const isAdjacent = idx === min - 1 || idx === max + 1;
-
-      if (!isAdjacent) {
-        setSelectionNote('Vui lòng chọn các khung giờ liền nhau (ví dụ 06–07 rồi 07–08).');
-        return next;
-      }
-
-      next.add(key);
-      setSelectionNote('');
-      return next;
-    });
-  };
+  const selectedCourt = useMemo(() => availableCourts.find(c => c.id === selectedCourtId), [availableCourts, selectedCourtId]);
+  const totalPrice = selectedCourt?.total_price || 0;
+  const durationText = useMemo(() => {
+     const startObj = new Date(`${dateId}T${startTime}:00`);
+     const endObj = new Date(`${dateId}T${endTime}:00`);
+     const diffMins = (endObj - startObj) / (1000 * 60);
+     if (diffMins <= 0) return '';
+     const h = Math.floor(diffMins / 60);
+     const m = diffMins % 60;
+     return `${h} tiếng${m > 0 ? ` ${m} phút` : ''}`;
+  }, [startTime, endTime]);
 
   if (loading) {
       return (
@@ -165,77 +214,81 @@ export default function BookingScreen({ navigation }) {
   }
 
   return (
-    <Screen>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Đặt sân</Text>
-          <Text style={styles.sub}>Chọn giờ chơi, hệ thống tự chọn sân tối ưu.</Text>
-        </View>
-        <TouchableOpacity onPress={() => navigation.navigate('MyBookings')} activeOpacity={0.8} style={styles.historyBtn}>
-          <Ionicons name="time-outline" size={18} color={colors.textPrimary} />
-          <Text style={styles.historyText}>Lịch sử</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.hero}>
-        <View style={styles.heroGlow} />
-        <Text style={styles.heroTitle}>{selectedFacility?.name ?? 'Chọn cơ sở'}</Text>
-        <Text style={styles.heroSub} numberOfLines={2}>{selectedFacility?.address ?? ''}</Text>
-        <View style={styles.heroRow}>
-          <View style={styles.heroPill}>
-            <Ionicons name="walk-outline" size={14} color={colors.primaryDark ?? colors.primary} />
-            <Text style={styles.heroPillText}>{selectedSport?.name === 'badminton' ? 'Cầu lông' : selectedSport?.name === 'tennis' ? 'Tennis' : 'Bóng bàn'}</Text>
-          </View>
-          <View style={styles.heroPill}>
-            <Ionicons name="time-outline" size={14} color={colors.primaryDark ?? colors.primary} />
-            <Text style={styles.heroPillText}>
-              06:00 – 22:00
-            </Text>
-          </View>
-        </View>
-      </View>
-
+    <Screen style={{ paddingHorizontal: 0 }}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        <Section title="Cơ sở">
-          <ScrollView horizontal={true} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.facilityRow}>
-            {facilities.map((f) => {
-              const selected = f.id === facilityId;
+        <View style={[styles.header, { paddingHorizontal: spacing.lg }]}>
+          <View>
+            <Text style={styles.title}>Đặt sân</Text>
+            <Text style={styles.sub}>Chọn giờ chơi, hệ thống tự chọn sân tối ưu.</Text>
+          </View>
+          <TouchableOpacity onPress={() => navigation.navigate('MyBookings')} activeOpacity={0.8} style={styles.historyBtn}>
+            <Ionicons name="time-outline" size={18} color={colors.textPrimary} />
+            <Text style={styles.historyText}>Lịch sử</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.heroContainer}>
+          <FlatList
+            data={facilities}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item) => item.id.toString()}
+            onMomentumScrollEnd={(e) => {
+              const index = Math.round(e.nativeEvent.contentOffset.x / windowWidth);
+              const facility = facilities[index];
+              if (facility && facility.id !== facilityId) {
+                handleFacilityChange(facility);
+              }
+            }}
+            renderItem={({ item }) => {
+              const isSelected = item.id === facilityId;
               return (
-                <PressableCard
-                  key={f.id}
-                  onPress={() => {
-                    setFacilityId(f.id);
-                    setSelectedKeys(new Set());
-                    setSelectionNote('');
-                  }}
-                  style={[styles.facilityCard, selected && styles.facilityCardSelected]}
-                >
-                  <View style={styles.facilityInner}>
-                    <View style={styles.facilityTop}>
-                      <View style={[styles.facilityBadge, selected && styles.facilityBadgeSelected]}>
-                        <Ionicons name="location-outline" size={16} color={selected ? colors.primaryDark ?? colors.primary : colors.textMuted} />
+                <View style={{ width: windowWidth, paddingHorizontal: spacing.lg }}>
+                  <View style={[styles.hero, isSelected && styles.heroSelected]}>
+                    <View style={styles.heroGlow} />
+                    <View style={styles.heroHeader}>
+                      <Text style={styles.heroTitle} numberOfLines={1}>{item.name}</Text>
+                      {isSelected && (
+                        <View style={styles.selectedBadge}>
+                          <Ionicons name="checkmark-circle" size={16} color={colors.white} />
+                          <Text style={styles.selectedBadgeText}>Đã chọn</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.heroSub} numberOfLines={2}>{item.address}</Text>
+                    <View style={styles.heroRow}>
+                      <View style={styles.heroPill}>
+                        <Ionicons name="time-outline" size={14} color={colors.primaryDark ?? colors.primary} />
+                        <Text style={styles.heroPillText}>
+                          {item.open_time?.substring(0, 5)} – {item.close_time?.substring(0, 5)}
+                        </Text>
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.facilityName} numberOfLines={1}>{f.name}</Text>
-                        <Text style={styles.facilityAddr} numberOfLines={2}>{f.address}</Text>
+                      <View style={styles.heroPill}>
+                        <Ionicons name="location-outline" size={14} color={colors.primaryDark ?? colors.primary} />
+                        <Text style={styles.heroPillText}>
+                          {item.address.includes('Quận') ? `Quận ${item.address.split('Quận')[1].split(',')[0].trim()}` : 'TP.HCM'}
+                        </Text>
                       </View>
                     </View>
-                    <View style={styles.facilityMetaRow}>
-                      <Ionicons name="time-outline" size={14} color={colors.textMuted} />
-                      <Text style={styles.facilityMetaText}>06:00 – 22:00</Text>
-                    </View>
-                    {selected ? (
-                      <View style={styles.facilitySelectedPill}>
-                        <Ionicons name="checkmark-circle" size={14} color={colors.white} />
-                        <Text style={styles.facilitySelectedText}>Đang chọn</Text>
-                      </View>
-                    ) : null}
                   </View>
-                </PressableCard>
+                </View>
               );
-            })}
-          </ScrollView>
-        </Section>
+            }}
+          />
+          {/* Indicators */}
+          <View style={styles.indicators}>
+            {facilities.map((f, i) => (
+              <View 
+                key={f.id} 
+                style={[
+                  styles.indicator, 
+                  f.id === facilityId && styles.indicatorActive
+                ]} 
+              />
+            ))}
+          </View>
+        </View>
 
         <Section title="Bộ môn">
           <View style={styles.sportGrid}>
@@ -246,8 +299,6 @@ export default function BookingScreen({ navigation }) {
                   key={s.id}
                   onPress={() => {
                     setSportId(s.id);
-                    setSelectedKeys(new Set());
-                    setSelectionNote('');
                   }}
                   style={[styles.sportCard, isSelected && styles.sportCardSelected]}
                 >
@@ -260,7 +311,9 @@ export default function BookingScreen({ navigation }) {
                       <View style={[styles.sportOverlay, isSelected && styles.sportOverlaySelected]} />
                     </ImageBackground>
                     <Text style={[styles.sportLabel, isSelected && styles.sportLabelSelected]}>
-                      {s.name === 'badminton' ? 'Cầu lông' : s.name === 'tennis' ? 'Tennis' : 'Bóng bàn'}
+                      {s.name === 'badminton' ? 'Cầu lông' : 
+                       s.name === 'tennis' ? 'Tennis' : 
+                       s.name === 'football' ? 'Bóng đá' : 'Bóng bàn'}
                     </Text>
                   </View>
                 </PressableCard>
@@ -269,73 +322,243 @@ export default function BookingScreen({ navigation }) {
           </View>
         </Section>
 
-        <Section title="Ngày">
-          <ScrollView horizontal={true} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateRow}>
-            {dateOptions.map((d) => {
-              const selectedDate = d.id === dateId;
-              return (
-                <TouchableOpacity
-                  key={d.id}
-                  onPress={() => {
-                    setDateId(d.id);
-                    setSelectedKeys(new Set());
-                    setSelectionNote('');
-                  }}
-                  activeOpacity={0.85}
-                  style={[styles.dateCard, selectedDate && styles.dateCardSelected]}
-                >
-                  <Text style={[styles.dateWeekday, selectedDate && styles.dateTextSelected]}>
-                    {d.isToday ? 'Hôm nay' : d.weekday}
-                  </Text>
-                  <Text style={[styles.dateDay, selectedDate && styles.dateTextSelected]}>{d.day}</Text>
-                  <Text style={[styles.dateMonth, selectedDate && styles.dateTextSelected]}>Thg {d.month}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+        <Section title="Ngày đặt">
+          <TouchableOpacity 
+            style={styles.dateSelectorButton} 
+            onPress={() => setShowDatePicker(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.dateSelectorLeft}>
+              <View style={styles.calendarIconContainer}>
+                <Ionicons name="calendar" size={20} color={colors.primary} />
+              </View>
+              <View>
+                <Text style={styles.dateValueMain}>
+                  {dateOptions.find(d => d.id === dateId)?.isToday ? 'Hôm nay, ' : ''}
+                  {dateOptions.find(d => d.id === dateId)?.weekday}, {dayjs(dateId).format('DD/MM/YYYY')}
+                </Text>
+                <Text style={styles.dateValueSub}>Nhấn để thay đổi ngày</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
         </Section>
 
-        <Section title="Chọn giờ">
+        {/* Modal chọn ngày */}
+        <Modal
+          visible={showDatePicker}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowDatePicker(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Chọn ngày chơi</Text>
+                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                  <Ionicons name="close" size={24} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+              
+              <FlatList
+                data={dateOptions}
+                keyExtractor={(item) => item.id}
+                numColumns={4}
+                contentContainerStyle={styles.dateGrid}
+                renderItem={({ item }) => {
+                  const isSelected = item.id === dateId;
+                  return (
+                    <TouchableOpacity 
+                      style={[
+                        styles.dateGridItem,
+                        isSelected && styles.dateGridItemSelected
+                      ]}
+                      onPress={() => {
+                        setDateId(item.id);
+                        setShowDatePicker(false);
+                      }}
+                    >
+                      <Text style={[styles.dateGridMonth, isSelected && styles.dateGridTextSelected]}>
+                         {item.isToday ? 'Hôm nay' : `T.${item.month}`}
+                      </Text>
+                      <Text style={[styles.dateGridDay, isSelected && styles.dateGridTextSelected]}>
+                        {item.day}
+                      </Text>
+                      <Text style={[styles.dateGridWeekday, isSelected && styles.dateGridTextSelected]}>
+                        {item.weekday}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            </View>
+          </View>
+        </Modal>
+
+        <Section title="Thời gian">
+          <View style={styles.timeButtonRow}>
+            <TouchableOpacity 
+              style={styles.timeButton} 
+              onPress={() => setShowTimePicker('start')}
+            >
+              <Text style={styles.timeButtonLabel}>Giờ bắt đầu</Text>
+              <View style={styles.timeValueContainer}>
+                <Ionicons name="time-outline" size={18} color={colors.primary} />
+                <Text style={styles.timeValueText}>{startTime}</Text>
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.timeButtonDivider} />
+
+            <TouchableOpacity 
+              style={styles.timeButton} 
+              onPress={() => setShowTimePicker('end')}
+            >
+              <Text style={styles.timeButtonLabel}>Giờ kết thúc</Text>
+              <View style={styles.timeValueContainer}>
+                <Ionicons name="time-outline" size={18} color={colors.primary} />
+                <Text style={styles.timeValueText}>{endTime}</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {searchError ? (
+            <View style={styles.errorBox}>
+               <Ionicons name="alert-circle" size={16} color={colors.error || '#EF4444'} />
+               <Text style={styles.errorText}>{searchError}</Text>
+            </View>
+          ) : null}
+        </Section>
+
+        {/* Modal chọn giờ */}
+        <Modal
+          visible={showTimePicker !== null}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowTimePicker(null)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}> Chọn {showTimePicker === 'start' ? 'giờ bắt đầu' : 'giờ kết thúc'} </Text>
+                <TouchableOpacity onPress={() => setShowTimePicker(null)}>
+                  <Ionicons name="close" size={24} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+              
+              <FlatList
+                data={showTimePicker === 'start' ? timeOptions.slice(0, -2) : timeOptions.slice(2)}
+                keyExtractor={(item) => item}
+                renderItem={({ item }) => {
+                  const now = new Date();
+                  const itemDate = new Date(`${dateId}T${item}:00`);
+                  let isPast = itemDate < now;
+                  
+                  // Lấy giờ đóng/mở cửa của cơ sở
+                  const openTime = selectedFacility?.open_time || '06:00:00';
+                  const closeTime = selectedFacility?.close_time || '22:00:00';
+                  
+                  // Chuyển đổi sang HH:mm để so sánh chuỗi
+                  const openHHmm = openTime.substring(0, 5);
+                  const closeHHmm = closeTime.substring(0, 5);
+                  
+                  const isClosed = item < openHHmm || item > closeHHmm;
+
+                  let isInvalidEnd = false;
+                  if (showTimePicker === 'end') {
+                    const startObj = new Date(`${dateId}T${startTime}:00`);
+                    isInvalidEnd = itemDate <= startObj; 
+                  }
+
+                  const isDisabled = isPast || isInvalidEnd || isClosed;
+
+                  return (
+                    <TouchableOpacity 
+                      style={[
+                        styles.modalTimeItem,
+                        (showTimePicker === 'start' ? startTime === item : endTime === item) && styles.modalTimeItemSelected,
+                        isDisabled && styles.modalTimeItemDisabled
+                      ]}
+                      disabled={isDisabled}
+                      onPress={() => {
+                        if (showTimePicker === 'start') {
+                          setStartTime(item);
+                          const currentEndObj = new Date(`${dateId}T${endTime}:00`);
+                          const newStartObj = new Date(`${dateId}T${item}:00`);
+                          if (currentEndObj <= newStartObj) {
+                            const [h, m] = item.split(':');
+                            const nextHour = (parseInt(h) + 1).toString().padStart(2, '0');
+                            setEndTime(`${nextHour}:${m}`);
+                          }
+                        } else {
+                          setEndTime(item);
+                        }
+                        setShowTimePicker(null);
+                      }}
+                    >
+                      <View>
+                        <Text style={[
+                          styles.modalTimeText,
+                          (showTimePicker === 'start' ? startTime === item : endTime === item) && styles.modalTimeTextSelected,
+                          isDisabled && styles.modalTimeTextDisabled
+                        ]}>{item}</Text>
+                        {isDisabled && (
+                          <Text style={styles.disabledLabel}>
+                            {isPast ? 'Đã qua' : isClosed ? 'Đóng cửa' : 'Không hợp lệ'}
+                          </Text>
+                        )}
+                      </View>
+                      {(showTimePicker === 'start' ? startTime === item : endTime === item) && !isDisabled && (
+                        <Ionicons name="checkmark" size={20} color={colors.primary} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                }}
+                contentContainerStyle={styles.modalList}
+              />
+            </View>
+          </View>
+        </Modal>
+
+        <Section title="Chọn sân">
           {!facilityId || !sportId || !dateId ? (
             <View style={styles.emptyBox}>
               <Text style={styles.emptyText}>Vui lòng chọn đủ cơ sở, bộ môn và ngày.</Text>
             </View>
-          ) : !courts.length ? (
+          ) : searchError ? (
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>Không có sân phù hợp (mock).</Text>
+              <Text style={styles.emptyText}>Vui lòng điều chỉnh lại thời gian phù hợp.</Text>
+            </View>
+          ) : !availableCourts.length ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyText}>Không có sân nào trống trong khung giờ này!</Text>
             </View>
           ) : (
             <>
-              <View style={styles.legendRow}>
-                <Text style={styles.hint}>Chọn nhiều khung giờ liền nhau.</Text>
-                <View style={styles.legendPill}>
-                  <View style={styles.legendDot} />
-                  <Text style={styles.legendText}>Còn trống</Text>
-                </View>
-              </View>
+              <Text style={styles.hint}>Danh sách sân đang rảnh:</Text>
               <View style={styles.grid}>
-                {allKeys.map((k) => {
-                  const count = availabilityCountByKey.get(k) ?? 0;
-                  const disabled = count === 0;
-                  const selected = selectedKeys.has(k);
+                {availableCourts.map((c) => {
+                  const selected = c.id === selectedCourtId;
                   return (
                     <TouchableOpacity
-                      key={k}
+                      key={c.id}
                       activeOpacity={0.85}
-                      onPress={() => toggleKey(k)}
-                      disabled={disabled}
+                      onPress={() => setSelectedCourtId(c.id)}
                       style={[
                         styles.slot,
-                        disabled && styles.slotUnavailable,
                         selected && styles.slotSelected,
                       ]}
                     >
-                      <Text style={[styles.slotTime, disabled && styles.slotTextUnavailable]}>
-                        {k.replace('-', ' – ')}
-                      </Text>
-                      <View style={[styles.countPill, disabled && styles.countPillDisabled, selected && styles.countPillSelected]}>
-                        <Text style={[styles.countText, disabled && styles.countTextDisabled, selected && styles.countTextSelected]}>
-                          {count} sân trống
+                      <View style={styles.courtHeader}>
+                         <Ionicons name="apps-outline" size={16} color={selected ? colors.primary : colors.textMuted} style={{ marginTop: 2 }} />
+                         <Text style={[styles.slotTime, selected && styles.slotTextSelected]}>
+                          {c.name}
+                        </Text>
+                      </View>
+                      
+                      <View style={[styles.countPill, selected && styles.countPillSelected]}>
+                        <Text style={[styles.countText, selected && styles.countTextSelected]}>
+                          Giá: {formatPrice(c.total_price)}
                         </Text>
                       </View>
                     </TouchableOpacity>
@@ -343,69 +566,31 @@ export default function BookingScreen({ navigation }) {
                 })}
               </View>
 
-              {selectionNote ? (
-                <View style={styles.noteBox}>
-                  <Text style={styles.noteText}>{selectionNote}</Text>
-                </View>
-              ) : null}
-
-              {assignment?.ok ? (
-                <View style={styles.assignmentBox}>
-                  <View style={styles.assignmentHeader}>
-                    <Ionicons 
-                      name={assignment.segments?.length === 1 ? "checkmark-circle" : "swap-horizontal"} 
-                      size={20} 
-                      color={assignment.segments?.length === 1 ? colors.secondary : colors.accent} 
-                    />
-                    <Text style={styles.assignmentTitle}>
-                      {assignment.segments?.length === 1 ? 'Sân trống liên tục' : 'Cần đổi sân trong buổi'}
-                    </Text>
-                  </View>
-                  <View style={styles.assignmentBody}>
-                    <Text style={styles.assignmentText}>
-                      {assignment.segments?.length === 1 
-                        ? `Bạn sẽ chơi tại ${courts.find(c => c.id === assignment.assignedCourtId)?.name}`
-                        : `Buổi chơi sẽ được chia ra ${assignment.segments.length} sân khác nhau.`
-                      }
-                    </Text>
-                  </View>
-                </View>
-              ) : null}
-
-              {assignment?.warnings?.length ? (
-                <View style={styles.warnBox}>
-                  <View style={styles.warnHeader}>
-                    <Ionicons name="alert-circle" size={20} color="#9A3412" />
-                    <Text style={styles.warnTitle}>Thông báo chuyển sân</Text>
-                  </View>
-                  {assignment.warnings.map((w, idx) => (
-                    <Text key={idx} style={styles.warnText}>{w}</Text>
-                  ))}
-                </View>
-              ) : null}
-
               <View style={styles.summary}>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Thời lượng</Text>
-                  <Text style={styles.summaryValue}>{hours ? `${hours} giờ` : '—'}</Text>
+                  <Text style={styles.summaryValue}>{durationText || '—'}</Text>
                 </View>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Tổng</Text>
+                  <Text style={styles.summaryLabel}>Giá (cho khung giờ này)</Text>
                   <Text style={styles.summaryTotal}>{formatPrice(totalPrice)}</Text>
                 </View>
                 <Button
                   title="Tiếp tục"
                   onPress={() =>
                     navigation.navigate('BookingConfirm', {
-                      desiredKeys,
-                      assignment,
-                      total: totalPrice,
+                      courtId: selectedCourtId,
+                      startTime,
+                      endTime,
                       facilityId,
                       sportId,
+                      sportName: selectedSport?.name || '',
                       date: dateId,
+                      total: totalPrice,
+                      courtName: selectedCourt?.name
                     })
                   }
-                  disabled={!assignment?.ok || hours === 0}
+                  disabled={!selectedCourtId || searchError !== ''}
                   fullWidth={true}
                 />
               </View>
@@ -418,9 +603,9 @@ export default function BookingScreen({ navigation }) {
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, children, style }) {
   return (
-    <View style={{ marginTop: spacing.lg }}>
+    <View style={[styles.section, style]}>
       <Text style={styles.sectionTitle}>{title}</Text>
       <View style={{ marginTop: spacing.sm }}>{children}</View>
     </View>
@@ -445,80 +630,91 @@ const styles = StyleSheet.create({
   },
   historyText: { fontSize: fontSize.sm, fontWeight: fontWeight.semiBold, color: colors.textPrimary },
 
+  heroContainer: {
+    paddingVertical: spacing.md,
+  },
   hero: {
-    marginTop: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.xxl,
+    padding: spacing.xl,
     overflow: 'hidden',
-    ...shadow.md,
+    ...shadow.lg,
+    elevation: 8,
+  },
+  heroSelected: {
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  heroHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  selectedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: borderRadius.full,
+  },
+  selectedBadgeText: {
+    fontSize: 10,
+    color: colors.white,
+    fontWeight: fontWeight.bold,
   },
   heroGlow: {
     position: 'absolute',
-    top: -70,
-    right: -90,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: colors.primaryLight,
-    opacity: 0.95,
+    top: -50,
+    right: -50,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255,255,255,0.15)',
   },
-  heroTitle: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.textPrimary },
-  heroSub: { marginTop: 4, fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 18 },
+  heroTitle: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.white },
+  heroSub: { marginTop: 4, fontSize: fontSize.sm, color: 'rgba(255,255,255,0.8)', lineHeight: 18 },
   heroRow: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   heroPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.backgroundAlt ?? colors.primaryLight,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: borderRadius.full,
     paddingVertical: 8,
     paddingHorizontal: spacing.sm,
   },
-  heroPillText: { fontSize: fontSize.sm, color: colors.textPrimary, fontWeight: fontWeight.semiBold },
+  heroPillText: { fontSize: fontSize.sm, color: colors.white, fontWeight: fontWeight.semiBold },
 
   bold: { fontWeight: fontWeight.bold, color: colors.textPrimary },
-  scroll: { paddingBottom: spacing.xxl },
+  scroll: { paddingBottom: spacing.xxl, paddingTop: spacing.md },
+  section: { marginBottom: spacing.xl, paddingHorizontal: spacing.lg },
   sectionTitle: { fontSize: fontSize.md, color: colors.textPrimary, fontWeight: fontWeight.bold },
-  facilityRow: { paddingRight: spacing.lg, gap: spacing.sm },
-  facilityCard: {
-    width: 300,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow.sm,
-  },
-  facilityCardSelected: { borderColor: colors.primary },
-  facilityInner: { padding: spacing.md },
-  facilityTop: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
-  facilityBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.backgroundAlt ?? colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  facilityBadgeSelected: { backgroundColor: colors.primaryLight },
-  facilityName: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.textPrimary },
-  facilityAddr: { marginTop: 2, fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 18 },
-  facilityMetaRow: { marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  facilityMetaText: { fontSize: fontSize.sm, color: colors.textMuted, fontWeight: fontWeight.semiBold },
-  facilitySelectedPill: {
-    marginTop: spacing.sm,
-    alignSelf: 'flex-start',
+  
+  // Indicators
+  indicators: {
     flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.primary,
-    paddingVertical: 6,
-    paddingHorizontal: spacing.sm,
-    borderRadius: borderRadius.full,
+    marginTop: spacing.sm,
   },
-  facilitySelectedText: { color: colors.white, fontSize: fontSize.sm, fontWeight: fontWeight.semiBold },
+  indicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.divider,
+  },
+  indicatorActive: {
+    width: 16,
+    backgroundColor: colors.primary,
+  },
+  indicatorActive: {
+    width: 16,
+    backgroundColor: colors.primary,
+  },
 
   sportGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   sportCard: {
@@ -548,22 +744,83 @@ const styles = StyleSheet.create({
   },
   sportLabelSelected: { color: colors.primaryDark ?? colors.primary },
 
-  dateRow: { paddingRight: spacing.lg, gap: spacing.sm },
-  dateCard: {
-    width: 86,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl,
-    paddingVertical: spacing.md,
+  // Date Selector Styles
+  dateSelectorButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
+    marginTop: spacing.xs,
     ...shadow.sm,
   },
-  dateCardSelected: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
-  dateWeekday: { fontSize: fontSize.xs, color: colors.textMuted, fontWeight: fontWeight.semiBold },
-  dateDay: { marginTop: 6, fontSize: fontSize.xl, color: colors.textPrimary, fontWeight: fontWeight.bold },
-  dateMonth: { marginTop: 2, fontSize: fontSize.xs, color: colors.textMuted, fontWeight: fontWeight.semiBold },
-  dateTextSelected: { color: colors.textPrimary },
+  dateSelectorLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  calendarIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: (colors.primaryLight || '#F0F9FF'),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dateValueMain: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+    color: colors.textPrimary,
+  },
+  dateValueSub: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  
+  // Date Grid Modal Styles
+  dateGrid: {
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  dateGridItem: {
+    flex: 1,
+    aspectRatio: 0.8,
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: 4,
+    borderWidth: 1,
+    borderColor: colors.divider,
+  },
+  dateGridItemSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+    ...shadow.md,
+  },
+  dateGridMonth: {
+    fontSize: 10,
+    fontWeight: fontWeight.bold,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+  },
+  dateGridDay: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    color: colors.textPrimary,
+    marginVertical: 2,
+  },
+  dateGridWeekday: {
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  dateGridTextSelected: {
+    color: colors.white,
+  },
 
   courtsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   courtCard: {
@@ -677,5 +934,132 @@ const styles = StyleSheet.create({
   assignmentTitle: { fontSize: fontSize.sm, fontWeight: fontWeight.bold, color: colors.textPrimary },
   assignmentBody: { marginLeft: 28 },
   assignmentText: { fontSize: fontSize.sm, color: colors.textSecondary, fontWeight: fontWeight.medium },
+  
+  // New Styles
+  timeButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginTop: spacing.xs,
+  },
+  timeButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeButtonLabel: {
+    fontSize: 10,
+    color: colors.textMuted,
+    fontWeight: fontWeight.bold,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  timeValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  timeValueText: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    color: colors.textPrimary,
+  },
+  timeButtonDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: colors.divider,
+    marginHorizontal: spacing.sm,
+  },
+  
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '70%',
+    paddingBottom: spacing.xxl,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  modalTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    color: colors.textPrimary,
+  },
+  modalList: {
+    paddingHorizontal: spacing.lg,
+  },
+  modalTimeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  modalTimeItemSelected: {
+    borderBottomColor: colors.primary,
+  },
+  modalTimeText: {
+    fontSize: fontSize.md,
+    color: colors.textPrimary,
+    fontWeight: fontWeight.medium,
+  },
+  modalTimeTextSelected: {
+    color: colors.primary,
+    fontWeight: fontWeight.bold,
+  },
+  modalTimeItemDisabled: {
+    opacity: 0.4,
+    backgroundColor: colors.background,
+  },
+  modalTimeTextDisabled: {
+    color: colors.textMuted,
+    textDecorationLine: 'line-through',
+  },
+  disabledLabel: {
+    fontSize: 10,
+    color: colors.textMuted,
+    fontStyle: 'italic',
+  },
+
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: spacing.sm,
+    backgroundColor: (colors.errorLight || '#FEE2E2'),
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+  },
+  errorText: {
+    fontSize: fontSize.sm,
+    color: (colors.error || '#EF4444'),
+    fontWeight: fontWeight.medium,
+  },
+  courtHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  slotTime: { fontSize: fontSize.md, fontWeight: fontWeight.semiBold, color: colors.textPrimary, flex: 1 },
+  slotTextSelected: {
+    color: colors.primary,
+  },
 });
 

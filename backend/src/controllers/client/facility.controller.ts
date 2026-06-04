@@ -24,4 +24,14 @@ export class ClientFacilityController {
             next(error);
         }
     }
+
+    static async getCourtTypes(req: Request, res: Response, next: NextFunction) {
+        try {
+            const { id } = req.params;
+            const result = await FacilityService.getCourtTypesByFacility(Number(id));
+            return AppResponse.success(res, result, "Lấy danh sách bộ môn thành công", 200);
+        } catch (error) {
+            next(error);
+        }
+    }
 }

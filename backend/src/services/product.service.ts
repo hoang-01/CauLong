@@ -3,17 +3,20 @@ import ApiError from '../utils/ErrorClass.js';
 import sequelize from '../config/database.js';
 
 export class ProductService {
-    static async getAllProducts() {
+    static async getAllProducts(facilityId?: number) {
         return await (models.Product as any).findAll({
             where: { is_active: true },
             include: [
                 {
                     model: models.ProductVariant,
                     as: 'variants',
+                    required: facilityId ? true : false, // Nếu có facilityId, bắt buộc phải có variant
                     include: [
                         {
                             model: models.InventoryLevel,
-                            as: 'inventory_levels'
+                            as: 'inventory_levels',
+                            required: facilityId ? true : false, // Nếu có facilityId, bắt buộc phải có kho
+                            where: facilityId ? { facility_id: facilityId } : {}
                         }
                     ]
                 }

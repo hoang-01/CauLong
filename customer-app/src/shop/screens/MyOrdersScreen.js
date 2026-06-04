@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 export default function MyOrdersScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState([]);
-  const [tab, setTab] = useState('active'); // active (pending, confirmed) | completed | cancelled
+  const [tab, setTab] = useState('active'); // active (pending_payment, pending_pickup) | completed | cancelled (cancelled, expired, refunded)
 
   const loadOrders = async () => {
     try {
@@ -52,9 +52,9 @@ export default function MyOrdersScreen({ navigation }) {
   };
 
   const data = useMemo(() => {
-    if (tab === 'cancelled') return orders.filter((o) => o.status === 'cancelled' || o.status === 'refunded');
+    if (tab === 'cancelled') return orders.filter((o) => o.status === 'cancelled' || o.status === 'refunded' || o.status === 'expired');
     if (tab === 'completed') return orders.filter((o) => o.status === 'completed');
-    return orders.filter((o) => o.status === 'pending' || o.status === 'confirmed');
+    return orders.filter((o) => o.status === 'pending_payment' || o.status === 'pending_pickup');
   }, [orders, tab]);
 
   if (loading && orders.length === 0) {
@@ -114,10 +114,11 @@ export default function MyOrdersScreen({ navigation }) {
 
 function OrderCard({ order, onCancel }) {
   const statusLabels = {
-    pending: { text: 'Chờ xử lý', color: '#F59E0B' },
-    confirmed: { text: 'Đã xác nhận', color: '#3B82F6' },
+    pending_payment: { text: 'Chưa thanh toán', color: '#F59E0B' },
+    pending_pickup: { text: 'Chờ lấy hàng', color: '#3B82F6' },
     completed: { text: 'Hoàn thành', color: '#10B981' },
     cancelled: { text: 'Đã hủy', color: '#EF4444' },
+    expired: { text: 'Quá thời hạn', color: '#64748B' },
     refunded: { text: 'Đã hoàn tiền', color: '#6366F1' },
   };
 
@@ -140,13 +141,22 @@ function OrderCard({ order, onCancel }) {
         ))}
       </View>
 
+      {order.pickup_type === 'pickup_store' && (
+        <View style={styles.pickupBox}>
+          <Ionicons name="storefront-outline" size={14} color={colors.textSecondary} />
+          <Text style={styles.pickupText}>
+            Lấy tại quầy: {order.pickup_time ? new Date(order.pickup_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date(order.pickup_time).toLocaleDateString('vi-VN') : 'N/A'}
+          </Text>
+        </View>
+      )}
+
       <View style={styles.cardFooter}>
         <View>
           <Text style={styles.totalLabel}>Tổng thanh toán:</Text>
           <Text style={styles.totalAmount}>{formatPrice(order.total_cents)}</Text>
         </View>
         
-        {order.status === 'pending' && (
+        {(order.status === 'pending_payment' || order.status === 'pending_pickup') && (
           <TouchableOpacity 
             style={styles.cancelBtn} 
             onPress={onCancel}
@@ -257,4 +267,14 @@ const styles = StyleSheet.create({
     borderColor: '#EF4444',
   },
   cancelBtnText: { color: '#EF4444', fontWeight: fontWeight.bold, fontSize: fontSize.sm },
+  pickupBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: spacing.md,
+    backgroundColor: colors.backgroundAlt,
+    padding: 8,
+    borderRadius: borderRadius.md,
+  },
+  pickupText: { fontSize: fontSize.xs, color: colors.textSecondary, fontWeight: fontWeight.semiBold },
 });

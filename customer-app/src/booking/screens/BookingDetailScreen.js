@@ -14,6 +14,24 @@ export default function BookingDetailScreen({ route, navigation }) {
   const booking = route?.params?.booking;
   const status = getBookingStatusMeta(booking?.status);
 
+  // Lấy bộ môn từ dữ liệu (hỗ trợ cả mock và data thực từ API)
+  const getSportLabel = () => {
+    if (booking?.court_type_label) return booking.court_type_label;
+    const type = booking?.slots?.[0]?.court?.court_type || booking?.court_type;
+    const mapping = {
+      badminton: 'Cầu lông',
+      tennis: 'Tennis',
+      football: 'Bóng đá',
+      table_tennis: 'Bóng bàn'
+    };
+    return mapping[type] || type || '—';
+  };
+
+  const getCourtName = () => {
+     if (booking?.court_name) return booking.court_name;
+     return booking?.slots?.[0]?.court?.name || '—';
+  };
+
   return (
     <Screen>
       <View style={styles.header}>
@@ -49,8 +67,8 @@ export default function BookingDetailScreen({ route, navigation }) {
 
           <View style={styles.ticketBody}>
             <View style={styles.infoGrid}>
-              <InfoItem label="Bộ môn" value={booking?.court_type_label} icon="fitness-outline" />
-              <InfoItem label="Sân" value={booking?.court_name} icon="location-outline" />
+              <InfoItem label="Bộ môn" value={getSportLabel()} icon="fitness-outline" />
+              <InfoItem label="Sân" value={getCourtName()} icon="location-outline" />
             </View>
 
             <View style={styles.timeSection}>
@@ -72,13 +90,8 @@ export default function BookingDetailScreen({ route, navigation }) {
                <Text style={styles.dateValue}>{booking?.date}</Text>
             </View>
 
-            <View style={styles.qrSection}>
-              <View style={styles.qrBox}>
-                 {/* Thay bằng QR Code thực tế nếu có lib, ở đây dùng placeholder icon đẹp */}
-                 <Ionicons name="qr-code" size={120} color={colors.textPrimary} />
-              </View>
-              <Text style={styles.qrText}>Mã đặt sân: #{booking?.id}</Text>
-              <Text style={styles.qrHint}>Đưa mã này cho nhân viên khi đến sân</Text>
+            <View style={styles.bookingIdBox}>
+              <Text style={styles.bookingIdText}>Mã đơn: #{booking?.id}</Text>
             </View>
           </View>
           
@@ -204,17 +217,8 @@ const styles = StyleSheet.create({
   dateSection: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginBottom: spacing.lg },
   dateValue: { fontSize: fontSize.md, fontWeight: fontWeight.semiBold, color: colors.textPrimary },
   
-  qrSection: { alignItems: 'center', paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider },
-  qrBox: {
-    padding: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.sm,
-  },
-  qrText: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.textPrimary },
-  qrHint: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: 4 },
+  bookingIdBox: { alignItems: 'center', paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider },
+  bookingIdText: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.textPrimary },
   
   priceRow: { 
     flexDirection: 'row', 

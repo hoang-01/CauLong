@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const checkAvailabilitySchema = z.object({
     query: z.object({
+        facility_id: z.coerce.number().positive(),
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày phải có định dạng YYYY-MM-DD'),
         start_time: z.string().regex(/^\d{2}:\d{2}$/, 'Giờ bắt đầu phải có định dạng HH:mm'),
         end_time: z.string().regex(/^\d{2}:\d{2}$/, 'Giờ kết thúc phải có định dạng HH:mm'),

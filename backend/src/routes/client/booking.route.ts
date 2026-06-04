@@ -8,7 +8,7 @@ import { requireRoles } from '../../middlewares/role.middleware.js';
 const router = Router();
 
 router.get('/my', verifyToken, ClientBookingController.getMyBookings);
-router.get('/availability', validate(checkAvailabilitySchema), ClientBookingController.checkAvailability);
+router.get('/check-availability', validate(checkAvailabilitySchema), ClientBookingController.checkAvailability);
 router.get('/daily-booked-slots', validate(getDailyBookedSchema), ClientBookingController.getDailyBooked);
 router.post('/preview-price', validate(previewPriceSchema), ClientBookingController.previewPrice);
 

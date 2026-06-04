@@ -157,12 +157,15 @@ Extracted at: 5/6/2026, 9:56:31 AM
 | id | int | NO | PRI |  | auto_increment |
 | user_id | int | YES | MUL |  |  |
 | facility_id | int | NO | MUL |  |  |
-| status | enum('pending','confirmed','completed','cancelled','refunded') | YES |  | pending |  |
+| status | enum('pending_payment','pending_pickup','completed','cancelled','refunded','expired') | NO |  | pending_payment |  |
 | payment_method | varchar(50) | NO |  |  |  |
 | subtotal_cents | int | YES |  | 0 |  |
 | discount_cents | int | YES |  | 0 |  |
 | total_cents | int | YES |  | 0 |  |
 | note | text | YES |  |  |  |
+| pickup_type | enum('immediate','pickup_store') | NO |  | immediate |  |
+| pickup_time | datetime | YES |  |  |  |
+| reservation_expires_at | datetime | YES |  |  |  |
 | created_at | datetime | NO |  |  |  |
 | updated_at | datetime | NO |  |  |  |
 | deleted_at | datetime | YES |  |  |  |

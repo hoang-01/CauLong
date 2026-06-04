@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import Screen from '../../shared/components/Screen';
 import { colors, spacing, fontSize, fontWeight, borderRadius, shadow } from '../../theme';
@@ -10,30 +10,33 @@ import { Ionicons } from '@expo/vector-icons';
 import PaymentOption from '../../shared/components/PaymentOption';
 
 export default function BookingConfirmScreen({ route, navigation }) {
-  const desiredKeys = route?.params?.desiredKeys ?? [];
-  const assignment = route?.params?.assignment ?? null;
+  const courtId = route?.params?.courtId ?? null;
+  const startTime = route?.params?.startTime ?? '';
+  const endTime = route?.params?.endTime ?? '';
   const total = route?.params?.total ?? 0;
   const facilityId = route?.params?.facilityId ?? null;
   const sportId = route?.params?.sportId ?? null;
+  const sportNameParam = route?.params?.sportName ?? '';
   const date = route?.params?.date ?? null;
+  const initialCourtName = route?.params?.courtName ?? '';
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [facility, setFacility] = useState(null);
   const [sport, setSport] = useState(null);
   const [courts, setCourts] = useState([]);
-  const [paymentMethod, setPaymentMethod] = useState('cod'); 
-
+  const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash' hoặc 'vnpay' khớp với backend enum
   useEffect(() => {
     async function loadData() {
       try {
         const [facilities, types, allCourts] = await Promise.all([
           getFacilities(),
-          getCourtTypes(),
+          getCourtTypes(facilityId),
           getCourts({ facilityId })
         ]);
         setFacility(facilities.find(f => f.id === facilityId));
-        setSport(types.find(s => s.id === sportId));
+        const foundSport = types.find(s => s.id === sportId);
+        setSport(foundSport);
         setCourts(allCourts);
       } catch (e) {
         console.error(e);
@@ -45,25 +48,50 @@ export default function BookingConfirmScreen({ route, navigation }) {
   }, [facilityId, sportId]);
 
   const courtName = (id) => courts.find((c) => c.id === id)?.name ?? id;
-  const sportLabel = sport?.name === 'badminton' ? 'Cầu lông' : sport?.name === 'tennis' ? 'Tennis' : sport?.name === 'table_tennis' ? 'Bóng bàn' : '—';
+
+  const getSportLabel = () => {
+    const name = sport?.name || sportNameParam;
+    const mapping = {
+      badminton: 'Cầu lông',
+      tennis: 'Tennis',
+      football: 'Bóng đá',
+      table_tennis: 'Bóng bàn'
+    };
+    return mapping[name] || name || '—';
+  };
+  const sportLabel = getSportLabel();
+
+  const durationText = useMemo(() => {
+    if (!startTime || !endTime) return '';
+    const startParts = startTime.split(':');
+    const endParts = endTime.split(':');
+    const startMins = parseInt(startParts[0]) * 60 + parseInt(startParts[1]);
+    const endMins = parseInt(endParts[0]) * 60 + parseInt(endParts[1]);
+    const diff = endMins - startMins;
+    if (diff <= 0) return '';
+    const h = Math.floor(diff / 60);
+    const m = diff % 60;
+    return `${h} tiếng${m > 0 ? ` ${m} phút` : ''}`;
+  }, [startTime, endTime]);
 
   const handleConfirm = async () => {
     try {
         setSubmitting(true);
-        const pricePerSlot = Math.round(total / desiredKeys.length);
-        const slots = assignment.segments.flatMap(seg => seg.keys.map(k => ({
-            court_id: seg.courtId,
-            start_at: `${date}T${k.split('-')[0]}:00Z`,
-            end_at: `${date}T${k.split('-')[1]}:00Z`,
-            price_cents: pricePerSlot
-        })));
+        
+        const slots = [{
+            court_id: courtId,
+            start_at: `${date} ${startTime}`,
+            end_at: `${date} ${endTime}`,
+            price_cents: total
+        }];
 
         const response = await api.createBooking({
             facility_id: facilityId,
-            total_cents: total,
-            note: '',
+            court_id: courtId,
+            date: date,
+            start_time: startTime,
+            end_time: endTime,
             payment_method: paymentMethod,
-            slots
         });
 
         if (paymentMethod === 'vnpay' && response?.paymentUrl) {
@@ -83,8 +111,9 @@ export default function BookingConfirmScreen({ route, navigation }) {
            ]);
         }
     } catch (error) {
-        console.error(error);
-        Alert.alert('Lỗi', 'Không thể hoàn tất đặt sân. Vui lòng thử lại.');
+        console.error("Lỗi đặt sân:", error.response?.data || error.message);
+        const msg = error.response?.data?.message || 'Không thể hoàn tất đặt sân. Vui lòng thử lại.';
+        Alert.alert('Lỗi', msg);
     } finally {
         setSubmitting(false);
     }
@@ -112,47 +141,13 @@ export default function BookingConfirmScreen({ route, navigation }) {
           <Text style={styles.meta}>Bộ môn: {sportLabel}</Text>
           <Text style={styles.meta}>Ngày: {date ?? '—'}</Text>
           <Text style={styles.meta}>
-            Sân: {assignment?.segments?.length === 1 ? courtName(assignment.segments[0].courtId) : 'Tự động (nhiều sân)'}
+            Sân/Bàn: {initialCourtName || courtName(courtId)}
           </Text>
           <View style={styles.divider} />
           <Text style={styles.label}>Khung giờ</Text>
-          {desiredKeys.length ? (
-            <Text style={styles.item}>
-              - {desiredKeys[0].split('-')[0]} – {desiredKeys[desiredKeys.length - 1].split('-')[1]} ({desiredKeys.length} giờ)
-            </Text>
-          ) : <Text style={styles.item}>—</Text>}
-
-          {assignment?.segments?.length ? (
-            <>
-              <View style={styles.divider} />
-              <View style={styles.assignmentHeader}>
-                <Ionicons 
-                  name={assignment.segments.length === 1 ? "location" : "swap-horizontal"} 
-                  size={16} 
-                  color={assignment.segments.length === 1 ? colors.primary : colors.accent} 
-                />
-                <Text style={styles.label}>Chi tiết sân/bàn</Text>
-              </View>
-              {assignment.segments.map((seg, idx) => (
-                <View key={`${seg.courtId}_${idx}`} style={styles.assignmentRow}>
-                   <Text style={styles.assignmentSlot}>{seg.keys[0].split('-')[0]} – {seg.keys[seg.keys.length - 1].split('-')[1]}</Text>
-                   <Text style={styles.assignmentCourt}>{courtName(seg.courtId)}</Text>
-                </View>
-              ))}
-            </>
-          ) : null}
-
-          {assignment?.warnings?.length ? (
-            <View style={styles.warnBox}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <Ionicons name="alert-circle" size={16} color="#9A3412" />
-                <Text style={{ fontSize: fontSize.xs, fontWeight: 'bold', color: '#9A3412' }}>Lưu ý chuyển sân</Text>
-              </View>
-              {assignment.warnings.map((w, idx) => (
-                <Text key={idx} style={styles.warnText}>{w}</Text>
-              ))}
-            </View>
-          ) : null}
+          <Text style={styles.item}>
+            {startTime} – {endTime} ({durationText})
+          </Text>
           <View style={styles.divider} />
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Tổng cộng</Text>
@@ -164,8 +159,8 @@ export default function BookingConfirmScreen({ route, navigation }) {
           <Text style={styles.paymentTitle}>Phương thức thanh toán</Text>
           <PaymentOption 
             label="Thanh toán tại quầy" 
-            selected={paymentMethod === 'cod'} 
-            onPress={() => setPaymentMethod('cod')} 
+            selected={paymentMethod === 'cash'} 
+            onPress={() => setPaymentMethod('cash')} 
             icon="cash-outline"
           />
           <PaymentOption 

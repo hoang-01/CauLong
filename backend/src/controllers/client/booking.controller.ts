@@ -15,7 +15,7 @@ export class ClientBookingController {
     
     static async checkAvailability(req: Request, res: Response, next: NextFunction) {
         try {
-            const query = req.query as CheckAvailabilityQuery;
+            const query = req.query as unknown as CheckAvailabilityQuery;
             const { startDateTime, endDateTime } = await BookingService.validateBookingTimes(
                 query.date, 
                 query.start_time, 
@@ -23,6 +23,7 @@ export class ClientBookingController {
             );
 
             const availableCourts = await BookingService.getAvailableCourts(
+                query.facility_id,
                 startDateTime.toDate(), 
                 endDateTime.toDate(),
                 query.court_type

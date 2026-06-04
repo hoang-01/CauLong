@@ -3,7 +3,7 @@ import sequelize from '../config/database.js';
 
 export interface CourtTypeAttributes {
     id: number;
-    name: 'badminton' | 'tennis' | 'table_tennis';
+    name: 'badminton' | 'tennis' | 'football' | 'table_tennis';
     surface: string | null;
     is_indoor: boolean;
     description: string | null;
@@ -30,7 +30,7 @@ CourtType.init(
             primaryKey: true,
         },
         name: {
-            type: DataTypes.ENUM('badminton', 'tennis', 'table_tennis'),
+            type: DataTypes.ENUM('badminton', 'tennis', 'football', 'table_tennis'),
             allowNull: false,
         },
         surface: {

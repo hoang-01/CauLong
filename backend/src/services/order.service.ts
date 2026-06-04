@@ -4,7 +4,7 @@ import sequelize from '../config/database.js';
 
 export class OrderService {
     static async createOrder(userId: number | null, data: any) {
-        const { customer_name, customer_phone, shipping_address, payment_method, items, note, facility_id } = data;
+        const { customer_name, customer_phone, shipping_address, payment_method, items, note, facility_id, pickup_type, pickup_time, reservation_expires_at } = data;
 
         if (!items || items.length === 0) {
             throw new ApiError("Giỏ hàng trống", 400);
@@ -31,11 +31,14 @@ export class OrderService {
             const order = await models.Order.create({
                 user_id: userId,
                 facility_id: targetFacilityId,
-                status: 'pending',
+                status: 'pending_payment',
                 payment_method,
                 subtotal_cents: subtotalCents,
                 total_cents: totalCents,
-                note: `Khách: ${customer_name || 'N/A'} - ${customer_phone || 'N/A'}. Đ/c: ${shipping_address || 'N/A'}. ${note || ''}`
+                note: `Khách: ${customer_name || 'N/A'} - ${customer_phone || 'N/A'}. [${pickup_type === 'pickup_store' ? 'Đặt trước - Lấy tại quầy' : 'Mua ngay tại quầy'}]. ${note || ''}`,
+                pickup_type: pickup_type || 'immediate',
+                pickup_time: pickup_time ? new Date(pickup_time) : null,
+                reservation_expires_at: reservation_expires_at ? new Date(reservation_expires_at) : null
             }, { transaction: t });
 
             // 2. Tạo Chi tiết đơn hàng
@@ -69,8 +72,8 @@ export class OrderService {
             throw new ApiError("Không tìm thấy đơn hàng", 404);
         }
 
-        if (order.status !== 'pending') {
-            throw new ApiError("Chỉ có thể hủy đơn hàng ở trạng thái chờ xử lý (pending)", 400);
+        if (order.status !== 'pending_payment' && order.status !== 'pending_pickup') {
+            throw new ApiError("Chỉ có thể hủy đơn hàng ở trạng thái chờ xử lý (pending_payment hoặc pending_pickup)", 400);
         }
 
         order.status = 'cancelled';

@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Thay đổi IP này thành IP máy tính của bạn nếu chạy trên thiết bị thật
 // Android Emulator thường dùng 10.0.2.2 để truy cập localhost máy host
-const baseURL = 'http://10.50.1.22:5000/api/v1'; 
+const baseURL = 'http://192.168.1.152:5000/api/v1'; 
 
 const api = axios.create({
     baseURL,
@@ -49,24 +49,49 @@ export const fetchFacilityDetail = async (id) => {
     return response.data.data;
 };
 
-export const fetchAvailability = async (facilityId, date, courtType) => {
+export const fetchCourtTypes = async (facilityId) => {
+    const response = await api.get(`/app/facilities/${facilityId}/court-types`);
+    return response.data.data;
+};
+
+export const fetchAvailability = async (facility_id, date, court_type) => {
     const response = await api.get('/app/bookings/daily-booked-slots', {
         params: { 
-            facility_id: facilityId, 
+            facility_id, 
             date, 
-            court_type: courtType 
+            court_type 
         }
     });
     return response.data.data;
 };
 
-export const fetchProducts = async () => {
-    const response = await api.get('/app/products');
+export const fetchCheckAvailability = async ({ facility_id, date, start_time, end_time, court_type }) => {
+    const response = await api.get('/app/bookings/check-availability', {
+        params: {
+            facility_id,
+            date,
+            start_time,
+            end_time,
+            court_type
+        }
+    });
+    return response.data.data;
+};
+
+export const fetchProducts = async (facilityId) => {
+    const response = await api.get('/app/products', {
+        params: { facility_id: facilityId }
+    });
     return response.data.data;
 };
 
 export const login = async (email, password) => {
     const response = await api.post('/app/auth/login', { email, password });
+    return response.data.data;
+};
+
+export const register = async (userData) => {
+    const response = await api.post('/app/auth/register', userData);
     return response.data.data;
 };
 
