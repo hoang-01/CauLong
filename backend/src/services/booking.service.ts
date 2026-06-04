@@ -9,7 +9,7 @@ import { PricingService } from './pricing.service.js';
 import { VNPayUtils } from '../utils/vnpay.js';
 
 export class BookingService {
-    static async getAvailableCourts(startDateTime: Date, endDateTime: Date, courtType?: string) {
+    static async getAvailableCourts(facilityId: number, startDateTime: Date, endDateTime: Date, courtType?: string) {
         
         const bookedSlots = await models.BookingSlot.findAll({
             where: {
@@ -18,6 +18,12 @@ export class BookingService {
                     { end_at: { [Op.gt]: startDateTime } }
                 ]
             },
+            include: [{
+                model: models.Booking,
+                as: 'booking',
+                where: { facility_id: facilityId }, // Chỉ lấy các slot của cơ sở này
+                attributes: []
+            }],
             attributes: ['court_id'],
             raw: true
         });
@@ -25,6 +31,7 @@ export class BookingService {
         const bookedCourtIds = bookedSlots.map(slot => slot.court_id);
 
         const whereCondition: any = {
+            facility_id: facilityId, // Bắt buộc lọc theo cơ sở
             id: { [Op.notIn]: bookedCourtIds },
             is_active: true
         };
@@ -34,6 +41,15 @@ export class BookingService {
         }
 
         
+        // 2. Lấy danh sách sân của cơ sở
+        const allCourtsOfThisType = await models.Court.findAll({
+            where: { facility_id: facilityId, court_type: courtType, is_active: true }
+        });
+
+        if (allCourtsOfThisType.length === 0) {
+            throw new ApiError(`Cơ sở này hiện không có sân ${courtType === 'badminton' ? 'cầu lông' : courtType} nào.`, 404);
+        }
+
         const availableCourts = await models.Court.findAll({
             where: whereCondition,
             include: [{
@@ -43,8 +59,13 @@ export class BookingService {
             }]
         });
 
+        if (availableCourts.length === 0) {
+            throw new ApiError('Tất cả sân trong khung giờ này đã được đặt hết. Vui lòng chọn giờ khác!', 404);
+        }
+
         
         // 3. Tính giá cho từng sân khả dụng
+        let lastError: any = null;
         const results = await Promise.all(availableCourts.map(async (court) => {
             try {
                 const totalPrice = await PricingService.calculateTotalPrice(
@@ -60,6 +81,7 @@ export class BookingService {
                     price_per_hour: totalPrice / (dayjs(endDateTime).diff(dayjs(startDateTime), 'minute') / 60)
                 };
             } catch (error) {
+                lastError = error;
                 // Nếu không có giá cho khung giờ này, coi như sân không khả dụng
                 return null;
             }
@@ -68,7 +90,8 @@ export class BookingService {
         const validResults = results.filter(court => court !== null);
 
         if (validResults.length === 0) {
-            throw new ApiError('Không tìm thấy cấu hình giá cho khung giờ bạn chọn tại cơ sở này!', 400);
+            if (lastError) throw lastError;
+            throw new ApiError('Tất cả sân trong khung giờ này đã được đặt hết. Vui lòng chọn giờ khác!', 404);
         }
 
         return validResults;
@@ -406,6 +429,11 @@ export class BookingService {
         }
         if (endDateTime.isBefore(startDateTime) || endDateTime.isSame(startDateTime)) {
             throw new ApiError('Giờ kết thúc phải sau giờ bắt đầu', 400);
+        }
+
+        const durationMinutes = endDateTime.diff(startDateTime, 'minute');
+        if (durationMinutes < 60) {
+            throw new ApiError('Thời lượng đặt sân tối thiểu là 1 tiếng (60 phút)', 400);
         }
 
         return { startDateTime, endDateTime };

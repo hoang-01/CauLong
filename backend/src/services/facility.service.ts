@@ -54,6 +54,26 @@ export class FacilityService {
         };
     }
 
+    static async getCourtTypesByFacility(id: number) {
+        await this.getFacilityById(id);
+
+        const courts = await (models.Court as any).findAll({
+            where: { facility_id: id, is_active: true },
+            attributes: ['court_type'],
+            group: ['court_type']
+        });
+
+        const types = courts.map((c: any) => c.court_type);
+        
+        // Map to full objects with labels if needed, but for now just strings is fine
+        // Actually, let's join with CourtType model or return consistent structure
+        const allTypes = await models.CourtType.findAll({
+            where: { name: { [Op.in]: types } }
+        });
+
+        return allTypes;
+    }
+
     static async createFacility(data: CreateFacilityInput) {
         const existingFacility = await models.Facility.findOne({ where: { name: data.name } });
         if (existingFacility) {

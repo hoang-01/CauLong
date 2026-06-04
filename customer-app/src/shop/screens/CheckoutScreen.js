@@ -10,14 +10,13 @@ import PaymentOption from '../../shared/components/PaymentOption';
 import { createOrder } from '../../services/api';
 
 export default function CheckoutScreen({ navigation }) {
-  const { state, clearCart } = useAppStore();
+  const { state, clearCart, selectedFacility } = useAppStore();
   const total = useMemo(() => calcCartTotal(state.cartItems), [state.cartItems]);
 
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cod'); 
   const [facilityId, setFacilityId] = useState(null);
 
@@ -29,9 +28,12 @@ export default function CheckoutScreen({ navigation }) {
                 setName(user.full_name);
                 setPhone(user.phone);
             }
-            if (facilities && facilities.length > 0) {
-                setAddress(facilities[0].address);
-                setFacilityId(facilities[0].id);
+            
+            // Ưu tiên lấy cơ sở đã chọn từ AppStore
+            const activeFacility = selectedFacility || (facilities && facilities[0]);
+            
+            if (activeFacility) {
+                setFacilityId(activeFacility.id);
             }
         } catch (e) {
             console.error(e);
@@ -40,7 +42,7 @@ export default function CheckoutScreen({ navigation }) {
         }
     }
     loadInitial();
-  }, []);
+  }, [selectedFacility]);
 
   const handleCheckout = async () => {
     if (!canSubmit) return;
@@ -49,7 +51,6 @@ export default function CheckoutScreen({ navigation }) {
       const orderData = {
         customer_name: name,
         customer_phone: phone,
-        shipping_address: address,
         payment_method: paymentMethod,
         facility_id: facilityId,
         items: state.cartItems.map(it => ({
@@ -79,7 +80,7 @@ export default function CheckoutScreen({ navigation }) {
     }
   };
 
-  const canSubmit = useMemo(() => name.trim() && phone.trim() && address.trim(), [name, phone, address]);
+  const canSubmit = useMemo(() => name.trim() && phone.trim(), [name, phone]);
 
   if (loading) {
       return (
@@ -99,7 +100,6 @@ export default function CheckoutScreen({ navigation }) {
       <View style={styles.card}>
         <Field label="Họ tên" value={name} onChangeText={setName} />
         <Field label="Số điện thoại" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-        <Field label="Địa chỉ" value={address} onChangeText={setAddress} />
 
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Tổng đơn hàng</Text>

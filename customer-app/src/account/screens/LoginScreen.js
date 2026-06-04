@@ -82,7 +82,7 @@ export default function LoginScreen({ navigation }) {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Chưa có tài khoản? </Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
             <Text style={styles.registerText}>Đăng ký ngay</Text>
           </TouchableOpacity>
         </View>
