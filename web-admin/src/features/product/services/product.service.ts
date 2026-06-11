@@ -5,7 +5,10 @@ import type {
   ProductVariant, 
   CreateProductPayload, 
   UpdateProductPayload, 
-  VariantPayload 
+  VariantPayload,
+  Facility,
+  PosProduct,
+  ProductFilter
 } from '../types/product.types';
 
 const BASE_URL = '/admin/products';
@@ -62,5 +65,23 @@ export const ProductService = {
   // 9. Xóa mềm / Khôi phục 1 biến thể
   toggleDeleteVariant: async (productId: number, variantId: number) => {
     return await axiosClient.patch<unknown, ApiResponse<unknown>>(`${BASE_URL}/${productId}/variants/${variantId}/toggle-delete`);
+  },
+
+  getFacilities: async () => {
+    return axiosClient.get<Facility[]>(
+      "/admin/facilities"
+    );
+  },
+
+  getProductsByFacility: async (
+    facilityId: number
+  ) => {
+    return axiosClient.get<PosProduct[]>(
+      `/admin/inventory/facility/${facilityId}`
+    );
+  },
+
+  searchProducts: async (filters?: ProductFilter) => {
+    return await axiosClient.get<unknown, ApiResponse<Product[]>>(`${BASE_URL}/search`, {params: filters});
   }
 };

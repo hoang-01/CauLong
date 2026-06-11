@@ -34,7 +34,12 @@ export class InventoryController {
     // 3. Kiểm kê (Đồng bộ số lượng thực tế)
     static async sync(req: Request, res: Response, next: NextFunction) {
         try {
-            const result = await InventoryService.syncStock(req.body);
+            const result =
+    await InventoryService.checkStock(
+        req.body.variant_id,
+        req.body.facility_id,
+        req.body.actual_quantity
+    );
             return AppResponse.success(res, result, 'Đồng bộ thực tế thành công');
         } catch (error) { next(error); }
     }

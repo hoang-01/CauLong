@@ -1,7 +1,8 @@
 import models  from "../models/index.js";
 import ApiError from '../utils/ErrorClass.js';
 import sequelize from '../config/database.js';
-
+import type { WhereOptions } from "sequelize/lib/model";
+import { Op } from "sequelize";
 export class ProductService {
     static async getAllProducts(facilityId?: number) {
         return await (models.Product as any).findAll({
@@ -43,7 +44,8 @@ export class ProductService {
         include: [
             {
             model: models.ProductVariant,
-            include: [{ model: models.InventoryLevel }]
+            as: 'variants',
+            include: [{ model: models.InventoryLevel, as: 'inventory_levels' }]
             }
         ]
         });
@@ -53,28 +55,62 @@ export class ProductService {
     }
 
     static async createProduct(data: any) {
-        const transaction = await sequelize.transaction();
+        const transaction =
+        await sequelize.transaction();
 
         try {
-            // 2. Tạo Product và cho phép "chèn" luôn mảng biến thể vào bảng product_variants
-            const product = await models.Product.create(data, {
+
+            const {
+            variants,
+            default_variant,
+            ...productData
+            } = data;
+
+            let variantData = [];
+
+            if (
+            variants &&
+            variants.length > 0
+            ) {
+            variantData = variants;
+            } else {
+            variantData = [
+                {
+                sku:
+                    default_variant.sku,
+
+                price_cents:
+                    default_variant.price_cents,
+
+                attributes: null
+                }
+            ];
+            }
+
+            const product =
+            await models.Product.create(
+                {
+                ...productData,
+                variants: variantData
+                },
+                {
                 include: [
                     {
-                        model: models.ProductVariant,
-                        as: 'variants' // Lưu ý: Tên này phải khớp với alias (as) bạn cấu hình trong models/index.ts
+                    model:
+                        models.ProductVariant,
+                    as: 'variants'
                     }
                 ],
-                transaction: transaction
-            });
+                transaction
+                }
+            );
 
-            // 3. Nếu mọi thứ trót lọt, chốt dữ liệu vào Database
             await transaction.commit();
-            return product;
 
+            return product;
         } catch (error) {
-            // 4. Nếu có bất kỳ lỗi gì (VD: trùng slug, trùng sku), hoàn tác toàn bộ
             await transaction.rollback();
-            throw error; // Ném lỗi ra ngoài để ApiError và Middleware bắt lấy
+            throw error;
         }
     }
 
@@ -192,5 +228,100 @@ export class ProductService {
                 deleted_at: new Date()
             };
         }
+    }
+
+    static async searchProduct(query: any) {
+        const {
+        search,
+        category,
+        min_price,
+        max_price,
+        rating,
+        page = 1,
+        limit = 20,
+        ...attributeFilters
+        } = query;
+
+        const productWhere: WhereOptions = {
+        is_active: true
+        };
+
+        const variantWhere: WhereOptions = {
+        is_active: true
+        };
+
+        // category
+        if (category) {
+        productWhere.category = category;
+        }
+
+        // rating
+        if (rating) {
+        productWhere.rating = {
+            [Op.gte]: Number(rating)
+        };
+        }
+
+        // search name / slug
+        if (search) {
+        (productWhere as any)[Op.or] = [
+            {
+            name: {
+                [Op.like]: `%${search}%`
+            }
+            },
+            {
+            slug: {
+                [Op.like]: `%${search}%`
+            }
+            }
+        ];
+        }
+
+        // price
+        if (min_price || max_price) {
+        variantWhere.price_cents = {};
+
+        if (min_price) {
+            variantWhere.price_cents[Op.gte] =
+            Number(min_price);
+        }
+
+        if (max_price) {
+            variantWhere.price_cents[Op.lte] =
+            Number(max_price);
+        }
+        }
+
+        // search sku
+        if (search) {
+        variantWhere.sku = {
+            [Op.like]: `%${search}%`
+        };
+        }
+
+        const products =
+        await models.Product.findAndCountAll({
+            where: productWhere,
+
+            include: [
+            {
+                model: models.ProductVariant,
+                as: 'variants',
+                required: true,
+                where: variantWhere
+            }
+            ],
+
+            offset:
+            (Number(page) - 1) *
+            Number(limit),
+
+            limit: Number(limit),
+
+            distinct: true
+        });
+
+        return products;
     }
 }

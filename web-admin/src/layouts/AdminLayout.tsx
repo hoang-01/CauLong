@@ -8,10 +8,10 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   AppstoreOutlined,
-  SettingOutlined,
+  InboxOutlined,
   CalendarOutlined,
   ShoppingCartOutlined,
-  TeamOutlined
+  ShopOutlined
 } from '@ant-design/icons';
 import { useAuthStore } from '../features/auth/store/auth.store';
 
@@ -65,14 +65,14 @@ const AdminLayout: React.FC = () => {
     // 👇 THÊM TRANG BÁN HÀNG VÀO ĐÂY 👇
     { 
       key: 'employee-group', 
-      icon: <TeamOutlined />, 
-      label: 'Nhân viên',
+      icon: <ShopOutlined />, 
+      label: 'Quầy POS',
       children: [
-        { key: '/employee/pos', icon: <ShoppingCartOutlined />, label: 'Bán hàng (POS)' },
-        { key: '/employee/orders', icon: <AppstoreOutlined />, label: 'Quản lý Đơn hàng' }
+        { key: '/employee/pos', icon: <ShoppingCartOutlined />, label: 'Bán hàng' },
+        { key: '/employee/orders', icon: <AppstoreOutlined />, label: 'Quản lý đơn hàng' }
       ]
     },
-    { key: '/products', icon: <SettingOutlined />, label: 'Hàng hóa & Kho' },
+    { key: '/products', icon: <InboxOutlined />, label: 'Hàng hóa & Kho' },
     { key: '/staff', icon: <UserOutlined />, label: 'Nhân viên' },
   ];
 

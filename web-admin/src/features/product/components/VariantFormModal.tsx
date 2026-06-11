@@ -94,9 +94,9 @@ export const VariantFormModal: React.FC<VariantFormModalProps> = ({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm transition-opacity p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/10 backdrop-blur-sm transition-opacity p-4">
       {/* Khung Modal */}
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg relative animate-fade-in-up">
+      <div className="bg-white border border-black rounded-lg shadow-xl w-full max-w-lg relative animate-fade-in-up">
         
         {/* Nút X Đóng */}
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition">

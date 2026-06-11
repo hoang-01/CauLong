@@ -78,7 +78,7 @@ const OrderManagementPage: React.FC = () => {
       title: 'Tổng tiền', 
       dataIndex: 'total_cents', 
       key: 'total_cents',
-      render: (cents: number) => `${(cents / 100).toLocaleString('vi-VN')} VNĐ` 
+      render: (cents: number) => `${(cents).toLocaleString('vi-VN')} VNĐ` 
     },
     { title: 'Kiểu nhận', dataIndex: 'pickup_type', key: 'pickup_type' },
     {

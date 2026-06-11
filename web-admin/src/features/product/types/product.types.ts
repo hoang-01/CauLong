@@ -6,26 +6,27 @@
 export interface InventoryLevel {
   id: number;
   facility_id: number;
-  available_quantity: number;
-  reserved_quantity: number;
-  low_stock_threshold: number;
+  quantity_on_hand: number;
+
+  facility?: {
+    id: number;
+    name: string;
+  };
 }
 
-// Type cho bảng Biến thể (Nằm trong Product)
 export interface ProductVariant {
   id: number;
   product_id: number;
   sku: string;
-  attributes: Record<string, unknown> | null; // Chứa JSON như { size: '4U', color: 'Red' }
+  attributes: Record<string, unknown> | null;
   price_cents: number;
   barcode: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  deleted_at: string | null; // Cực kỳ quan trọng để FE biết trạng thái Xóa mềm (Thùng rác)
-  
-  // Mối quan hệ: 1 Biến thể có 1 mức tồn kho (Alias khớp với Backend)
-  inventory_levels?: InventoryLevel; 
+  deleted_at: string | null;
+
+  inventory_levels?: InventoryLevel[];
 }
 
 // Type cho bảng Sản phẩm (Cha)
@@ -84,7 +85,92 @@ export interface UpdateProductPayload {
 export interface AdjustInventoryPayload {
   variant_id: number;
   facility_id: number;
-  quantity_change: number; // Số dương để nhập thêm, số âm để trừ đi
-  reason: 'restock' | 'sale' | 'damage' | 'adjustment';
-  notes?: string;
+  qty_delta: number;
+  reason:
+    | 'import'
+    | 'sale'
+    | 'return'
+    | 'adjustment';
+  note?: string;
+}
+
+export interface PosProduct {
+  id: number;
+  quantity_on_hand: number;
+
+  variant: {
+    id: number;
+    sku: string;
+    price_cents: number;
+
+    attributes: Record<
+      string,
+      string
+    >;
+
+    product: {
+      id: number;
+      name: string;
+      category: string;
+      thumbnail_url: string | null;
+    };
+  };
+}
+
+export interface Facility {
+  id: number;
+  name: string;
+  address: string;
+}
+
+export type FormVariant = {
+  sku: string;
+  price_cents: number;
+  attributes?: Record<string, unknown>;
+  barcode?: string;
+};
+
+export interface FormData {
+  name: string;
+  slug: string;
+  category:
+    | 'racket'
+    | 'shuttlecock'
+    | 'shoes'
+    | 'apparel'
+    | 'accessory';
+
+  description: string;
+  thumbnail_url: string;
+
+  sku: string;
+  price_cents: number;
+
+  size: string;
+  color: string;
+
+  hasVariants: boolean;
+  variants: VariantPayload[];
+}
+
+export interface ProductFilter {
+  search?: string;
+  category?: string;
+
+  min_price?: number;
+  max_price?: number;
+
+  rating?: number;
+
+  page?: number;
+  limit?: number;
+
+  sort?:
+    | "newest"
+    | "oldest"
+    | "price_asc"
+    | "price_desc"
+    | "rating";
+
+  attrs?: Record<string, string>;
 }

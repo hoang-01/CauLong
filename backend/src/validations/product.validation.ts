@@ -6,27 +6,40 @@ import { z } from 'zod';
 
 // Schema thêm mới sản phẩm
 export const createProductSchema = z.object({
-    body: z.object({
-        name: z.string({ message: 'Tên sản phẩm là bắt buộc' })
-            .min(1, 'Tên sản phẩm không được để trống'),
-        
-        slug: z.string({ message: 'Slug là bắt buộc' }),
-        // Ép kiểu category đúng với các danh mục bạn đã note trong DB
-        category: z.enum(['racket', 'shuttlecock', 'shoes', 'apparel', 'accessory'], {
-            message: 'Danh mục sản phẩm không hợp lệ'
-        }),
-        
-        description: z.string().nullish(), // Cho phép null hoặc bỏ trống
-        
-        thumbnail_url: z.string().url('Đường dẫn ảnh (URL) không hợp lệ').nullish(),
+  body: z.object({
+    name: z.string().min(1),
 
-        // Bổ sung rating và review_count khớp với DB
-        rating: z.number().min(0).max(5, 'Rating tối đa là 5').nullish(),
-        review_count: z.number().int().min(0).nullish(),
-        
-        // Đã đổi từ 'active' thành 'is_active' cho khớp với Model
-        is_active: z.boolean().nullish() 
-    })
+    slug: z.string(),
+
+    category: z.enum([
+      'racket',
+      'shuttlecock',
+      'shoes',
+      'apparel',
+      'accessory'
+    ]),
+
+    description: z.string().optional(),
+
+    thumbnail_url: z.string().url().optional(),
+
+    default_variant: z
+      .object({
+        sku: z.string(),
+        price_cents: z.number().positive()
+      })
+      .optional(),
+
+    variants: z
+      .array(
+        z.object({
+          sku: z.string(),
+          price_cents: z.number().positive(),
+          attributes: z.record(z.string(), z.any()).optional()
+        })
+      )
+      .optional()
+  })
 });
 
 // Trích xuất Type để dùng ở Controller nếu cần
@@ -97,5 +110,63 @@ export const updateVariantSchema = z.object({
     )
 });
 
+export const ProductFilterDto = z.object({
+  search: z.string().trim().optional(),
+
+  category: z.string().trim().optional(),
+
+  min_price: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .optional(),
+
+  max_price: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .optional(),
+
+  rating: z.coerce
+    .number()
+    .min(0)
+    .max(5)
+    .optional(),
+
+  page: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(1),
+
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(20),
+
+  sort: z.enum([
+    'newest',
+    'oldest',
+    'price_asc',
+    'price_desc',
+    'rating'
+  ]).optional(),
+
+  attrs: z.record(z.string(), z.string()).optional()
+})
+.refine(
+  data =>
+    !data.min_price ||
+    !data.max_price ||
+    data.min_price <= data.max_price,
+  {
+    message: 'min_price phải nhỏ hơn max_price',
+    path: ['min_price']
+  }
+);
+
+export type ProductFilterInput = z.infer<typeof ProductFilterDto>;
 export type AddVariantsInput = z.infer<typeof addVariantsSchema>['body'];
 export type UpdateVariantInput = z.infer<typeof updateVariantSchema>['body'];

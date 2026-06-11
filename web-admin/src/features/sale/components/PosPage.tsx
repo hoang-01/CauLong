@@ -67,11 +67,8 @@ const PosPage = () => {
     loadProducts(facilityId);
   }, [facilityId, loadProducts]);
 
-  const handleFacilityChange = (
-    value: number
-  ) => {
+  const handleFacilityChange = (value: number) => {
     setFacilityId(value);
-
     setSelectedFacilityId(value);
   };
 

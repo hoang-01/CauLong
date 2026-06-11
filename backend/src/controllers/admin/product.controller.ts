@@ -27,10 +27,7 @@ export class AdminProductController{
 
     static async create(req: Request, res: Response, next: NextFunction) {
         try {
-            // Truyền nguyên vẹn req.body xuống Service 
-            // Zod ở vòng ngoài đã bảo chứng độ an toàn rồi!
             const result = await ProductService.createProduct(req.body);
-            
             return AppResponse.success(res, result, 'Tạo sản phẩm thành công', 201);
         } catch (error) {
             next(error);
@@ -111,5 +108,16 @@ export class AdminProductController{
         } catch (error) {
             next(error);
         }
+    }
+
+    static async searchProduct(req: Request, res: Response, next: NextFunction) {
+        const result = await ProductService.searchProduct(req.query);
+
+        return res.status(200).json({
+            success: true,
+            total: result.count,
+            page: Number(req.query.page || 1),
+            data: result.rows
+        });
     }
 }

@@ -17,19 +17,23 @@ export class InventoryService {
 
         const isOuterTransaction = !!options.transaction;
         try {
-            // 1. Cập nhật hoặc Tạo mới bản ghi trong inventory_levels (Sử dụng Upsert logic)
-            // Dựa trên UNIQUE (variant_id, facility_id) [cite: 1375, 1382]
-            const [inventory, created] = await (models.InventoryLevel as any).findOrCreate({
-                where: { 
-                    variant_id: data.variant_id, 
-                    facility_id: data.facility_id 
+            console.log({
+                variant_id: data.variant_id,
+                facility_id: data.facility_id,
+                qty_delta: data.qty_delta
+            });
+            const [inventory] = await models.InventoryLevel.findOrCreate({
+                where: {
+                    variant_id: data.variant_id,
+                    facility_id: data.facility_id
                 },
                 defaults: {
                     variant_id: data.variant_id,
                     facility_id: data.facility_id,
                     quantity_on_hand: 0
                 },
-                transaction
+                transaction,
+                lock: transaction.LOCK.UPDATE
             });
 
             // Tính toán số lượng mới
@@ -140,7 +144,18 @@ export class InventoryService {
             limit: Number(limit),
             offset: Number(offset),
             order: [['created_at', 'DESC']],
-            include: [{ model: models.ProductVariant, as: 'variant' }]
+            include: [
+            {
+                model: models.ProductVariant,
+                as: 'variant',
+                include: [
+                {
+                    model: models.Product,
+                    as: 'product'
+                }
+                ]
+            }
+]
         });
     }
 
@@ -148,38 +163,43 @@ export class InventoryService {
      * 3. Cảnh báo tồn kho thấp
      */
     static async getLowStock(threshold: number = 5) {
-        return await (models.InventoryLevel as any).findAll({
+        return await models.InventoryLevel.findAll({
             where: {
-                quantity_on_hand: { [Op.lt]: threshold }
+                quantity_on_hand: {
+                    [Op.lt]: threshold
+                }
             },
-            include: [{ model: models.ProductVariant, as: 'variant' }]
+            order: [
+                ['quantity_on_hand', 'ASC']
+            ],
+            include: [
+                {
+                    model: models.ProductVariant,
+                    as: 'variant'
+                }
+            ]
         });
     }
 
     /**
      * 4. Kiểm kê (Đồng bộ số lượng thực tế)
      */
-    static async syncStock(data: {
-        variant_id: number;
-        facility_id: number;
-        actual_quantity: number;
-        note?: string;
-    }) {
-        const currentLevel = await (models.InventoryLevel as any).findOne({
-            where: { variant_id: data.variant_id, facility_id: data.facility_id }
-        });
+    static async checkStock(
+        variant_id: number,
+        facility_id: number,
+        quantity: number
+    ) {
+        const inventory =
+            await models.InventoryLevel.findOne({
+                where: {
+                    variant_id,
+                    facility_id
+                }
+            });
 
-        const currentQty = currentLevel ? currentLevel.quantity_on_hand : 0;
-        const diff = data.actual_quantity - currentQty;
-
-        if (diff === 0) return { message: "Số lượng khớp, không cần điều chỉnh" };
-
-        return await this.adjustInventory({
-            variant_id: data.variant_id,
-            facility_id: data.facility_id,
-            qty_delta: diff,
-            reason: 'adjustment',
-            note: `Kiểm kê thực tế: ${data.note || ''}`
-        });
+        return (
+            inventory &&
+            inventory.quantity_on_hand >= quantity
+        );
     }
 }

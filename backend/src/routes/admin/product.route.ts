@@ -3,12 +3,13 @@ import { AdminProductController } from '../../controllers/admin/product.controll
 import { validate } from '../../middlewares/validate.middleware.js';
 import { verifyToken } from '../../middlewares/auth.middleware.js';
 import { requireRoles } from '../../middlewares/role.middleware.js';
-import { createProductSchema, updateProductSchema, addVariantsSchema, updateVariantSchema } from '../../validations/product.validation.js';
+import { createProductSchema, updateProductSchema, addVariantsSchema, updateVariantSchema, ProductFilterDto } from '../../validations/product.validation.js';
 
 const router = Router();
 router.use(verifyToken);
 
 router.get('/', AdminProductController.getAll);
+router.get('/search', requireRoles(['admin']), validate(ProductFilterDto), AdminProductController.searchProduct);
 router.get('/:id', AdminProductController.getById);
 router.post('/', requireRoles(['admin']), validate(createProductSchema), AdminProductController.create);
 router.put('/:id', requireRoles(['admin']), validate(updateProductSchema), AdminProductController.update);

@@ -1,7 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, {
+  useState,
+  useEffect
+} from 'react';
+
 import { message } from 'antd';
+
 import { InventoryService } from '../services/inventory.service';
-import type { AdjustInventoryPayload } from '../types/product.types';
+
+import { ProductService } from '../services/product.service';
+
+import type {
+  AdjustInventoryPayload,
+  Facility
+} from '../types/product.types';
 
 interface InventoryAdjustModalProps {
   open: boolean;
@@ -18,21 +29,38 @@ export const InventoryAdjustModal: React.FC<InventoryAdjustModalProps> = ({
 }) => {
   // State quản lý form
   const [loading, setLoading] = useState(false);
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [facilityId, setFacilityId] = useState<number | null>(null);
   const [type, setType] = useState<'add' | 'subtract'>('add');
   const [quantity, setQuantity] = useState<number | ''>('');
-  const [reason, setReason] = useState<'restock' | 'sale' | 'damage' | 'adjustment'>('restock');
+  const [reason, setReason] = useState<'import' | 'sale' | 'return' | 'adjustment'>('import');
   const [notes, setNotes] = useState('');
 
   // Reset form mỗi khi mở modal mới
   useEffect(() => {
-    if (open) {
-      // eslint-disable-next-line
-      setType('add');
-      setQuantity('');
-      setReason('restock');
-      setNotes('');
-    }
-  }, [open]);
+    const loadFacilities = async () => {
+      try {
+        const res = await ProductService.getFacilities();
+
+        setFacilities(res.data);
+
+        if (
+          res.data &&
+          res.data.length > 0
+        ) {
+          setFacilityId(
+            res.data[0].id
+          );
+        }
+      } catch (error) {
+        console.error(error);
+        message.error(
+          "Không tải được danh sách cơ sở"
+        );
+      }
+    };
+    loadFacilities();
+  }, []);
 
   // Hàm xử lý khi bấm nút "Xác nhận"
   const handleSubmit = async (e: React.FormEvent) => {
@@ -47,12 +75,13 @@ export const InventoryAdjustModal: React.FC<InventoryAdjustModalProps> = ({
       setLoading(true);
       
       // Đóng gói dữ liệu gửi lên API
-      const payload: AdjustInventoryPayload = {
+      const payload: AdjustInventoryPayload =
+      {
         variant_id: variantId,
-        facility_id: 1, // ID cơ sở/kho hàng (Tạm fix cứng là 1, nếu dự án có nhiều kho thì đổi thành dropdown select)
-        quantity_change: type === 'add' ? Number(quantity) : -Number(quantity),
+        facility_id: facilityId!,
+        qty_delta: type === 'add' ? Number(quantity) : -Number(quantity),
         reason: reason,
-        notes: notes,
+        note: notes,
       };
 
       // Tung cú đập gọi API
@@ -73,9 +102,9 @@ export const InventoryAdjustModal: React.FC<InventoryAdjustModalProps> = ({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm transition-opacity">
-      {/* Khung Modal */}
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md relative animate-fade-in-up">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/10 backdrop-blur-md p-4">      
+    {/* Khung Modal */}
+      <div className="bg-white border border-black rounded-lg shadow-xl w-full max-w-md relative animate-fade-in-up">
         
         {/* Nút X (Đóng) ở góc trên */}
         <button 
@@ -94,6 +123,44 @@ export const InventoryAdjustModal: React.FC<InventoryAdjustModalProps> = ({
 
         {/* Form Nhập Liệu */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Cơ sở
+              <span className="text-red-500">
+                *
+              </span>
+            </label>
+
+            <select
+              required
+              value={
+                facilityId ?? ""
+              }
+              onChange={(e) =>
+                setFacilityId(
+                  Number(
+                    e.target.value
+                  )
+                )
+              }
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {facilities.map(
+                (facility) => (
+                  <option
+                    key={
+                      facility.id
+                    }
+                    value={
+                      facility.id
+                    }
+                  >
+                    {facility.name}
+                  </option>
+                )
+              )}
+            </select>
+          </div>
           
           <div className="flex gap-4">
             {/* Cột 1: Loại giao dịch */}
@@ -135,13 +202,24 @@ export const InventoryAdjustModal: React.FC<InventoryAdjustModalProps> = ({
             </label>
             <select
               value={reason}
-              onChange={(e) => setReason(e.target.value as 'restock' | 'sale' | 'damage' | 'adjustment')}
+              onChange={(e) => setReason(e.target.value as 'import' | 'sale' | 'return' | 'adjustment')}
               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="restock">Nhập hàng mới (Restock)</option>
-              <option value="sale">Bán lẻ (Sale)</option>
-              <option value="damage">Hàng hỏng/Lỗi (Damage)</option>
-              <option value="adjustment">Điều chỉnh kiểm kê (Adjustment)</option>
+              <option value="import">
+                Nhập hàng mới
+              </option>
+
+              <option value="sale">
+                Bán hàng
+              </option>
+
+              <option value="return">
+                Hàng trả lại
+              </option>
+
+              <option value="adjustment">
+                Điều chỉnh kiểm kê
+              </option>
             </select>
           </div>
 

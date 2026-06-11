@@ -133,16 +133,15 @@ export class PaymentService {
         const vnp_ResponseCode =
             vnpayQuery.vnp_ResponseCode;
 
-        const vnp_Amount =
+        const paidAmount =
             Number(
                 vnpayQuery.vnp_Amount
             ) / 100;
 
         const t =
-            await models.Order.sequelize!.transaction();
+            await sequelize.transaction();
 
         try {
-
             /**
              * ORDER_15
              * => 15
@@ -174,15 +173,13 @@ export class PaymentService {
             }
 
             const payment =
-                await models.Payment.findOne(
-                    {
-                        where: {
-                            order_id:
-                                order.id
-                        },
-                        transaction: t
-                    }
-                );
+                await models.Payment.findOne({
+                    where: {
+                        order_id:
+                            order.id
+                    },
+                    transaction: t
+                });
 
             if (!payment) {
                 await t.rollback();
@@ -194,6 +191,9 @@ export class PaymentService {
                 };
             }
 
+            /**
+             * Tránh IPN gửi lại
+             */
             if (
                 payment.status ===
                 'paid'
@@ -207,9 +207,28 @@ export class PaymentService {
                 };
             }
 
+            /**
+             * Chỉ xử lý đơn đang chờ thanh toán
+             */
+            if (
+                order.status !==
+                'pending_payment'
+            ) {
+                await t.rollback();
+
+                return {
+                    RspCode: '02',
+                    Message:
+                        'Order already processed'
+                };
+            }
+
+            /**
+             * Validate số tiền
+             */
             if (
                 payment.amount_cents !==
-                vnp_Amount
+                paidAmount
             ) {
                 await t.rollback();
 
@@ -220,46 +239,54 @@ export class PaymentService {
                 };
             }
 
+            /**
+             * Thanh toán thành công
+             */
             if (
                 vnp_ResponseCode === '00'
             ) {
                 const orderItems =
                     await models.OrderItem.findAll({
                         where: {
-                            order_id: order.id
+                            order_id:
+                                order.id
                         },
                         transaction: t
                     });
 
+                /**
+                 * Trừ kho
+                 */
                 for (const item of orderItems) {
                     await InventoryService.adjustInventory(
                         {
-                            variant_id: item.variant_id,
-                            facility_id: order.facility_id,
-                            qty_delta: -item.quantity,
-                            reason: 'sale',
-                            ref_order_id: order.id
+                            variant_id:
+                                item.variant_id,
+
+                            facility_id:
+                                order.facility_id,
+
+                            qty_delta:
+                                -item.quantity,
+
+                            reason:
+                                'sale',
+
+                            ref_order_id:
+                                order.id
                         },
                         {
                             transaction: t
                         }
                     );
                 }
-                
-                await order.update(
-                    {
-                        status:
-                            'completed'
-                    },
-                    {
-                        transaction: t
-                    }
-                );
 
+                /**
+                 * Cập nhật Payment
+                 */
                 await payment.update(
                     {
-                        status:
-                            'paid',
+                        status: 'paid',
 
                         provider_ref:
                             vnpayQuery.vnp_TransactionNo,
@@ -272,8 +299,22 @@ export class PaymentService {
                     }
                 );
 
+                /**
+                 * Chuyển sang chờ giao hàng
+                 */
+                await order.update(
+                    {
+                        status:
+                            'pending_pickup'
+                    },
+                    {
+                        transaction: t
+                    }
+                );
             } else {
-
+                /**
+                 * Thanh toán thất bại
+                 */
                 await payment.update(
                     {
                         status:
@@ -289,12 +330,8 @@ export class PaymentService {
                 );
 
                 /**
-                 * Có thể giữ nguyên
-                 * pending_payment
-                 *
-                 * hoặc hủy đơn:
-                 *
-                 * status: 'cancelled'
+                 * Giữ nguyên pending_payment
+                 * để khách có thể thanh toán lại
                  */
             }
 
@@ -305,9 +342,7 @@ export class PaymentService {
                 Message:
                     'Confirm Success'
             };
-
         } catch (error) {
-
             await t.rollback();
 
             console.error(

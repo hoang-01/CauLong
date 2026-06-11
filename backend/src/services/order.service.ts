@@ -4,6 +4,7 @@ import sequelize from '../config/database.js';
 import { InventoryService } from './inventory.service.js';
 import dayjs from 'dayjs';
 import { VNPayUtils } from '../utils/vnpay.js';
+import { Op } from 'sequelize';
 
 export class OrderService {
     static async createOrder(userId: number | null, data: any) {
@@ -120,49 +121,41 @@ export class OrderService {
 
     static async getAll() {
         return models.Order.findAll({
-        include: [
-            {
-            model: models.OrderItem,
-            as: "items",
-            include: [
-                {
-                model: models.ProductVariant,
-                as: "variant",
-                include: [
-                    {
-                    model: models.Product,
-                    as: "product"
-                    }
-                ]
+            where: {
+                status: {
+                    [Op.in]: [
+                        'completed',
+                        'cancelled',
+                        'refunded',
+                        'expired'
+                    ]
                 }
-            ]
-            }
-        ],
-        order: [["created_at", "DESC"]]
-        });
-    }
+            },
 
-    static async getById(orderId: number) {
-        const order = await models.Order.findByPk(orderId, {
             include: [
                 {
                     model: models.OrderItem,
-                    as: 'items',
-                    include: [
-                        {
-                            model: models.ProductVariant,
-                            as: 'variant',
-                            include: [
-                                {
-                                    model: models.Product,
-                                    as: 'product'
-                                }
-                            ]
-                        }
-                    ]
+                    as: 'items'
                 }
+            ],
+
+            order: [
+                ['created_at', 'DESC']
             ]
         });
+    }
+
+    static async getById(id: number) {
+        const order =
+            await models.Order.findByPk(id, {
+                include: [
+                    {
+                        model:
+                            models.OrderItem,
+                        as: 'items'
+                    }
+                ]
+            });
 
         if (!order) {
             throw new ApiError(
@@ -170,74 +163,39 @@ export class OrderService {
                 404
             );
         }
-    return order;
+
+        return order;
     }
 
     static async completeOrder(orderId: number) {
-        const t = await sequelize.transaction();
-        try {
-            const order = await models.Order.findByPk(
-                orderId,
-                {
-                    include: [
-                        {
-                            model: models.OrderItem,
-                            as: 'items'
-                        }
-                    ],
-                    transaction: t
-                }
+        const order =
+            await models.Order.findByPk(orderId);
+
+        if (!order) {
+            throw new ApiError(
+                'Không tìm thấy đơn hàng',
+                404
             );
-
-            if (!order) {
-                throw new ApiError('Không tìm thấy đơn hàng', 404);
-            }
-
-            const payment =
-                await models.Payment.findOne({
-                    where: {
-                        order_id: order.id,
-                        status: 'paid'
-                    },
-                    transaction: t
-                });
-
-            if (!payment) {
-                throw new ApiError(
-                    'Đơn hàng chưa thanh toán',
-                    400
-                );
-            }
-
-            if (order.status === 'completed') {
-                throw new ApiError('Đơn hàng đã hoàn tất', 400);
-            }
-
-            const items = (order as any).items;
-            for (const item of items) {
-                await InventoryService.adjustInventory(
-                    {
-                        variant_id: item.variant_id,
-                        facility_id: order.facility_id,
-                        qty_delta: -item.quantity,
-                        reason: 'sale',
-                        ref_order_id: order.id,
-                        note: `Hoàn tất đơn hàng #${order.id}`
-                    },
-                    {
-                        transaction: t
-                    }
-                );
-            }
-
-            order.status = 'completed';
-            await order.save({transaction: t});
-            await t.commit();
-            return order;
-        } catch (error) {
-            await t.rollback();
-            throw error;
         }
+
+        if (
+            order.status !==
+            'pending_pickup'
+        ) {
+            throw new ApiError(
+                'Đơn chưa sẵn sàng giao',
+                400
+            );
+        }
+
+        await order.update({
+            status: 'completed'
+        });
+
+        return {
+            message:
+                'Hoàn thành đơn hàng'
+        };
     }
 
     static async confirmOrder(orderId: number) {
@@ -362,7 +320,7 @@ export class OrderService {
             ],
 
             order: [
-                ['pickup_time', 'ASC']
+                ['created_at', 'DESC']
             ]
         });
     }
@@ -412,29 +370,27 @@ export class OrderService {
             );
         }
 
-        const t =
-            await sequelize.transaction();
+        const t = await sequelize.transaction();
 
         try {
+            // Lấy thông tin variants
             const variants =
                 await models.ProductVariant.findAll({
                     where: {
                         id: items.map(
                             i => i.variant_id
                         )
-                    }
+                    },
+                    transaction: t
                 });
 
-            const variantMap =
-                new Map(
-                    variants.map(v => [
-                        v.id,
-                        v
-                    ])
-                );
+            const variantMap = new Map(
+                variants.map(v => [v.id, v])
+            );
 
             let totalCents = 0;
 
+            // Kiểm tra tồn kho + tính tiền
             for (const item of items) {
                 const variant =
                     variantMap.get(
@@ -448,11 +404,26 @@ export class OrderService {
                     );
                 }
 
+                const enoughStock =
+                    await InventoryService.checkStock(
+                        item.variant_id,
+                        facility_id,
+                        item.quantity
+                    );
+
+                if (!enoughStock) {
+                    throw new ApiError(
+                        'Không đủ tồn kho',
+                        400
+                    );
+                }
+
                 totalCents +=
                     variant.price_cents *
                     item.quantity;
             }
 
+            // Tạo Order
             const order =
                 await models.Order.create(
                     {
@@ -461,15 +432,7 @@ export class OrderService {
                         facility_id,
 
                         status:
-                            payment_method ===
-                            'cash'
-                                ? 'completed'
-                                : 'pending_payment',
-
-                        subtotal_cents:
-                            totalCents,
-
-                        discount_cents: 0,
+                            'pending_payment',
 
                         total_cents:
                             totalCents,
@@ -485,6 +448,7 @@ export class OrderService {
                     }
                 );
 
+            // Tạo Order Items
             await models.OrderItem.bulkCreate(
                 items.map(item => ({
                     order_id:
@@ -499,15 +463,14 @@ export class OrderService {
                     unit_price_cents:
                         variantMap.get(
                             item.variant_id
-                        )!.price_cents,
-
-                    discount_cents: 0
+                        )!.price_cents
                 })),
                 {
                     transaction: t
                 }
             );
 
+            // Tạo Payment ở trạng thái chờ
             await models.Payment.create(
                 {
                     provider:
@@ -520,23 +483,20 @@ export class OrderService {
                         order.id,
 
                     status:
-                        payment_method ===
-                        'cash'
-                            ? 'paid'
-                            : 'pending',
+                        'pending',
 
                     paid_at:
-                        payment_method ===
-                        'cash'
-                            ? new Date()
-                            : null
+                        null
                 },
                 {
                     transaction: t
                 }
             );
 
-            let paymentUrl: string | null = null;
+            let paymentUrl: string | null =
+                null;
+
+            // Nếu là VNPAY thì sinh QR/link
             if (
                 payment_method ===
                 'vnpay'

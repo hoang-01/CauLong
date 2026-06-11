@@ -9,7 +9,12 @@ import {
 
 import { usePosStore } from "../store/sale.store";
 import { PosService } from "../services/sale.api";
-import { useState } from "react";
+
+import {
+  useState,
+  useEffect,
+} from "react";
+
 import { QRCode } from "react-qr-code";
 
 const CartSidebar = () => {
@@ -21,11 +26,17 @@ const CartSidebar = () => {
     selectedFacilityId,
   } = usePosStore();
 
-  const [qrVisible, setQrVisible] = useState(false);
+  const [paymentMethod, setPaymentMethod] =
+    useState<"cash" | "vnpay">("cash");
 
-  const [paymentUrl, setPaymentUrl] = useState("");
+  const [qrVisible, setQrVisible] =
+    useState(false);
 
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "vnpay">("cash");
+  const [paymentUrl, setPaymentUrl] =
+    useState("");
+
+  const [currentOrderId, setCurrentOrderId] =
+    useState<number | null>(null);
 
   const total = cart.reduce(
     (sum, item) =>
@@ -34,8 +45,7 @@ const CartSidebar = () => {
     0
   );
 
-  const handleCheckout =
-  async () => {
+  const handleCheckout = async () => {
     try {
       if (!selectedFacilityId) {
         message.error(
@@ -52,51 +62,69 @@ const CartSidebar = () => {
       }
 
       const res =
-        await PosService.createPosOrder(
-          {
-            facility_id:
-              selectedFacilityId,
+        await PosService.createPosOrder({
+          facility_id:
+            selectedFacilityId,
 
-            payment_method:
-              paymentMethod,
+          payment_method:
+            paymentMethod,
 
-            items: cart.map(
-              (item) => ({
-                variant_id:
-                  item.variantId,
+          items: cart.map(
+            (item) => ({
+              variant_id:
+                item.variantId,
+              quantity:
+                item.quantity,
+            })
+          ),
+        });
 
-                quantity:
-                  item.quantity,
-              })
-            ),
-          }
+      const order =
+        res.data.order;
+
+      /**
+       * CASH
+       */
+      if (
+        paymentMethod === "cash"
+      ) {
+        await PosService.payCash(
+          order.id
         );
 
-      if (
-        paymentMethod ===
-        "cash"
-      ) {
         clearCart();
 
         message.success(
-          "Thanh toán thành công"
+          "Đã thanh toán tiền mặt thành công"
         );
 
         return;
       }
 
-      const paymentUrl =
+      /**
+       * VNPAY
+       */
+      const url =
         res.data.payment_url;
 
-      if (paymentUrl) {
-        setPaymentUrl(paymentUrl);
-
-        setQrVisible(true);
-
-        message.info(
-          "Vui lòng quét QR để thanh toán"
+      if (!url) {
+        message.error(
+          "Không tạo được link thanh toán"
         );
+        return;
       }
+
+      setCurrentOrderId(
+        order.id
+      );
+
+      setPaymentUrl(url);
+
+      setQrVisible(true);
+
+      message.info(
+        "Vui lòng quét QR để thanh toán"
+      );
     } catch (error) {
       console.error(error);
 
@@ -106,16 +134,86 @@ const CartSidebar = () => {
     }
   };
 
-  console.log(paymentUrl);
+  /**
+   * POLLING CHECK PAYMENT STATUS
+   */
+  useEffect(() => {
+    if (
+      !qrVisible ||
+      !currentOrderId
+    ) {
+      return;
+    }
+
+    const interval =
+      setInterval(
+        async () => {
+          try {
+            const res =
+              await PosService.getOrderById(
+                currentOrderId
+              );
+
+            const order =
+              res.data;
+
+            /**
+             * VNPay thành công
+             * backend sẽ chuyển:
+             *
+             * pending_payment
+             * ->
+             * pending_pickup
+             */
+            if (
+              order.status ===
+              "pending_pickup"
+            ) {
+              clearCart();
+
+              setQrVisible(
+                false
+              );
+
+              setCurrentOrderId(
+                null
+              );
+
+              setPaymentUrl("");
+
+              message.success(
+                "Thanh toán thành công"
+              );
+
+              clearInterval(
+                interval
+              );
+            }
+          } catch (error) {
+            console.error(
+              error
+            );
+          }
+        },
+        3000
+      );
+
+    return () =>
+      clearInterval(
+        interval
+      );
+  }, [
+    qrVisible,
+    currentOrderId,
+    clearCart,
+  ]);
 
   return (
     <>
       <h3>Giỏ hàng</h3>
 
       {cart.length === 0 ? (
-        <Empty
-          description="Chưa có sản phẩm"
-        />
+        <Empty description="Chưa có sản phẩm" />
       ) : (
         cart.map((item) => (
           <div
@@ -163,14 +261,20 @@ const CartSidebar = () => {
             >
               <Button
                 onClick={() => {
-                  if (item.quantity === 1) {
-                    removeItem(item.variantId);
+                  if (
+                    item.quantity ===
+                    1
+                  ) {
+                    removeItem(
+                      item.variantId
+                    );
                     return;
                   }
 
                   updateQuantity(
                     item.variantId,
-                    item.quantity - 1
+                    item.quantity -
+                      1
                   );
                 }}
               >
@@ -191,7 +295,8 @@ const CartSidebar = () => {
               <Button
                 onClick={() => {
                   if (
-                    item.quantity >= item.stock
+                    item.quantity >=
+                    item.stock
                   ) {
                     message.warning(
                       "Đã đạt số lượng tồn kho"
@@ -201,7 +306,8 @@ const CartSidebar = () => {
 
                   updateQuantity(
                     item.variantId,
-                    item.quantity + 1
+                    item.quantity +
+                      1
                   );
                 }}
               >
@@ -229,7 +335,9 @@ const CartSidebar = () => {
       <Divider />
 
       <Radio.Group
-        value={paymentMethod}
+        value={
+          paymentMethod
+        }
         onChange={(e) =>
           setPaymentMethod(
             e.target.value
@@ -248,8 +356,7 @@ const CartSidebar = () => {
       <Divider />
 
       <h2>
-        Tổng tiền:
-        {" "}
+        Tổng tiền:{" "}
         {total.toLocaleString()}
         đ
       </h2>
@@ -271,22 +378,29 @@ const CartSidebar = () => {
       <Modal
         open={qrVisible}
         footer={null}
-        onCancel={() =>
-          setQrVisible(false)
-        }
         centered
+        destroyOnClose
+        onCancel={() =>
+          setQrVisible(
+            false
+          )
+        }
       >
         <div
           style={{
-            textAlign: "center",
+            textAlign:
+              "center",
           }}
         >
           <h3>
-            Quét mã VNPay để thanh toán
+            Quét mã VNPay để
+            thanh toán
           </h3>
 
           <QRCode
-            value={paymentUrl}
+            value={
+              paymentUrl
+            }
             size={250}
           />
 
@@ -295,7 +409,8 @@ const CartSidebar = () => {
               marginTop: 16,
             }}
           >
-            Dùng điện thoại quét mã QR
+            Dùng điện thoại
+            quét mã QR
           </p>
         </div>
       </Modal>
