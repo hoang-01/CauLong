@@ -56,7 +56,7 @@ export class OrderService {
                 quantity: it.quantity,
                 unit_price_cents: it.price_cents
             }));
-            
+
             await models.OrderItem.bulkCreate(orderItems, { transaction: t });
 
             await t.commit();
@@ -145,14 +145,46 @@ export class OrderService {
         });
     }
 
+    static async cancelExpiredOrders() {
+        const expiredDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // Quá 24 giờ
+        
+        const [updatedCount] = await models.Order.update(
+            { status: 'expired' },
+            {
+                where: {
+                    status: 'pending_payment',
+                    created_at: {
+                        [Op.lt]: expiredDate
+                    }
+                }
+            }
+        );
+        
+        if (updatedCount > 0) {
+            console.log(`[CRON] Đã hủy ${updatedCount} đơn hàng quá 24 giờ chưa thanh toán`);
+        }
+        return updatedCount;
+    }
+
     static async getById(id: number) {
         const order =
             await models.Order.findByPk(id, {
                 include: [
                     {
-                        model:
-                            models.OrderItem,
-                        as: 'items'
+                        model: models.OrderItem,
+                        as: 'items',
+                        include: [
+                            {
+                                model: models.ProductVariant,
+                                as: 'variant',
+                                include: [
+                                    {
+                                        model: models.Product,
+                                        as: 'product'
+                                    }
+                                ]
+                            }
+                        ]
                     }
                 ]
             });
@@ -198,6 +230,54 @@ export class OrderService {
         };
     }
 
+    static async refundOrder(orderId: number, reason: string = '') {
+        const t = await sequelize.transaction();
+        try {
+            const order = await models.Order.findByPk(orderId, { transaction: t });
+            if (!order) {
+                throw new ApiError('Không tìm thấy đơn hàng', 404);
+            }
+            if (order.status !== 'pending_pickup') {
+                throw new ApiError('Chỉ có thể hoàn tiền đơn hàng đang chờ lấy', 400);
+            }
+
+            let newNote = order.note || '';
+            if (reason) {
+                newNote = newNote ? `${newNote}\n[Hoàn tiền]: ${reason}` : `[Hoàn tiền]: ${reason}`;
+            }
+
+            await order.update({ status: 'refunded', note: newNote }, { transaction: t });
+
+            const payments = await models.Payment.findAll({
+                where: { order_id: order.id, status: 'paid' },
+                transaction: t
+            });
+            for (const payment of payments) {
+                await payment.update({ status: 'refunded' }, { transaction: t });
+            }
+
+            const orderItems = await models.OrderItem.findAll({
+                where: { order_id: order.id },
+                transaction: t
+            });
+            for (const item of orderItems) {
+                await InventoryService.adjustInventory({
+                    variant_id: item.variant_id,
+                    facility_id: order.facility_id,
+                    qty_delta: item.quantity,
+                    reason: 'adjustment',
+                    ref_order_id: order.id
+                }, { transaction: t });
+            }
+
+            await t.commit();
+            return { message: 'Hoàn tiền thành công' };
+        } catch (error) {
+            await t.rollback();
+            throw error;
+        }
+    }
+
     static async confirmOrder(orderId: number) {
         const order = await models.Order.findByPk(orderId);
         if (!order) {
@@ -216,6 +296,23 @@ export class OrderService {
         order.status = 'pending_pickup';
         await order.save();
         return order;
+    }
+
+    static async getVNPayUrl(orderId: number, ipAddr: string = '127.0.0.1') {
+        const order = await this.getById(orderId);
+        
+        if (order.status !== 'pending_payment') {
+            throw new ApiError('Chỉ có thể tạo thanh toán cho đơn đang chờ thanh toán', 400);
+        }
+
+        const paymentUrl = VNPayUtils.createPaymentUrl({
+            amount: order.total_cents,
+            orderId: `ORDER_${order.id}`,
+            orderInfo: `Thanh toan don hang POS #${order.id}`,
+            ipAddr
+        });
+
+        return { paymentUrl };
     }
 
     static async payCash(orderId: number) {
@@ -286,13 +383,21 @@ export class OrderService {
                 );
             }
 
-            await order.update(
-            {
+            const updateData: any = {
                 status: 'pending_pickup'
-            },
-            {
-                transaction: t
-            });
+            };
+            if (!order.reservation_expires_at) {
+                updateData.reservation_expires_at = new Date(order.created_at.getTime() + 24 * 60 * 60 * 1000);
+            }
+            if (!order.pickup_time) {
+                updateData.pickup_time = new Date(order.created_at.getTime() + 4 * 60 * 60 * 1000);
+            }
+
+            await order.update(
+                updateData,
+                {
+                    transaction: t
+                });
 
             await t.commit();
 
@@ -521,8 +626,7 @@ export class OrderService {
 
             return {
                 order,
-                payment_url:
-                    paymentUrl
+                paymentUrl
             };
         } catch (error) {
             await t.rollback();

@@ -1,10 +1,5 @@
 import axiosClient from "../../../config/axios";
-
-import type {
-  PosProduct,
-  Facility,
-  Order,
-} from "../types/sale.types";
+import type { PosProduct, Facility, Order } from "../types/sale.types";
 import type { ApiResponse } from "../../../types/api.type";
 
 export const PosService = {
@@ -83,5 +78,15 @@ export const PosService = {
   // Staff Xác nhận đã giao hàng (Hoàn thành đơn)
   completeOrder: async (id: number) => {
     return await axiosClient.patch<unknown, ApiResponse<unknown>>(`/admin/orders/${id}/complete`);
+  },
+
+  // Tạo URL thanh toán VNPay cho đơn hàng hiện có
+  getVNPayUrl: async (id: number) => {
+    return await axiosClient.get<unknown, ApiResponse<{paymentUrl: string}>>(`/admin/orders/${id}/vnpay-url`);
+  },
+
+  // Hoàn tiền đơn hàng
+  refundOrder: async (id: number, reason: string) => {
+    return await axiosClient.patch<unknown, ApiResponse<unknown>>(`/admin/orders/${id}/refund`, { reason });
   }
 };

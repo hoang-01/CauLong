@@ -127,6 +127,17 @@ export class AdminOrderController {
         }
     }
 
+    static async getVNPayUrl( req: Request, res: Response, next: NextFunction ) {
+        try {
+            const orderId = Number(req.params.id);
+            const ipAddr = '127.0.0.1'; // TODO: Get from request in production
+            const data = await OrderService.getVNPayUrl(orderId, ipAddr);
+            return AppResponse.success(res, data, 'Lấy link VNPay thành công');
+        } catch (err) {
+            next(err);
+        }
+    }
+
     static async createPosOrder(
         req: any,
         res: Response,
@@ -144,6 +155,25 @@ export class AdminOrderController {
                 result,
                 'Tạo đơn hàng thành công',
                 201
+            );
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    static async refundOrder(
+        req: Request,
+        res: Response,
+        next: NextFunction
+    ) {
+        try {
+            const orderId = Number(req.params.id);
+            const reason = req.body.reason;
+            const data = await OrderService.refundOrder(orderId, reason);
+            return AppResponse.success(
+                res,
+                data,
+                'Hoàn tiền thành công'
             );
         } catch (err) {
             next(err);

@@ -11,5 +11,9 @@ export const InventoryService = {
   // Lấy danh sách sắp hết hàng để cảnh báo
   getLowStockAlerts: async () => {
     return await axiosClient.get<unknown, ApiResponse<unknown>>('/admin/inventory/low-stock');
+  },
+
+  getVariantStock: async (facilityId: number, variantId: number) => {
+    return await axiosClient.get<unknown, ApiResponse<unknown>>(`/admin/inventory/facility/${facilityId}/variant/${variantId}`);
   }
 };

@@ -67,4 +67,16 @@ export class InventoryController {
             return AppResponse.success(res, result, 'Danh sách hàng tồn kho thấp');
         } catch (error) { next(error); }
     }
+
+    // 6. Xem tồn kho chi tiết của 1 biến thể tại 1 chi nhánh
+    static async getVariantStock(req: Request, res: Response, next: NextFunction) {
+        try {
+            const facilityId = Number(req.params.facilityId);
+            const variantId = Number(req.params.variantId);
+            const result = await InventoryService.getVariantStock(facilityId, variantId);
+            return AppResponse.success(res, result, 'Lấy thông tin tồn kho thành công');
+        } catch (error) {
+            next(error);
+        }
+    }
 }

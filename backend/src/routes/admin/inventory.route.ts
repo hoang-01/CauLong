@@ -16,6 +16,7 @@ router.use(verifyToken);
 router.post('/adjust', requireRoles(['admin', 'staff']), validate(adjustInventorySchema), InventoryController.adjust);
 
 router.get('/facility/:facilityId', requireRoles(['admin', 'staff']), InventoryController.getByFacility);
+router.get('/facility/:facilityId/variant/:variantId', requireRoles(['admin', 'staff']), InventoryController.getVariantStock);
 
 router.post('/transfer', validate(transferStockSchema), InventoryController.transfer);
 router.post('/sync', validate(syncStockSchema), InventoryController.sync);

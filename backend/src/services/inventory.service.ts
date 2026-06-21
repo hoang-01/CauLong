@@ -202,4 +202,27 @@ export class InventoryService {
             inventory.quantity_on_hand >= quantity
         );
     }
+
+    /**
+     * 5. Lấy tồn kho của một biến thể tại một cơ sở
+     */
+    static async getVariantStock(facilityId: number, variantId: number) {
+        const level = await models.InventoryLevel.findOne({
+            where: {
+                facility_id: facilityId,
+                variant_id: variantId
+            }
+        });
+
+        if (!level) {
+            return {
+                id: null,
+                facility_id: facilityId,
+                variant_id: variantId,
+                quantity_on_hand: 0
+            };
+        }
+
+        return level;
+    }
 }

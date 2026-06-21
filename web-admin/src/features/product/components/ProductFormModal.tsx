@@ -10,9 +10,9 @@ interface ProductFormModalProps {
   onSuccess: () => void;
 }
 
-export const ProductFormModal: React.FC<ProductFormModalProps> = ({ 
-  open, 
-  product, 
+export const ProductFormModal: React.FC<ProductFormModalProps> = ({
+  open,
+  product,
   onClose,
   onSuccess // FIX 1: Lấy onSuccess ra để sử dụng
 }) => {
@@ -126,17 +126,17 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           variants: formData.hasVariants
             ? formData.variants
             : [
-                {
-                  sku: formData.sku,
-                  price_cents: formData.price_cents,
-                  attributes: {}
-                }
-              ]
+              {
+                sku: formData.sku,
+                price_cents: formData.price_cents,
+                attributes: {}
+              }
+            ]
         };
         await ProductService.createProduct(payload);
         message.success('Tạo sản phẩm thành công!');
       }
-      
+
       // FIX 2: Báo cho component cha biết là đã xong để load lại bảng & Đóng modal
       onSuccess();
       onClose();
@@ -190,7 +190,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 type="text"
                 required
                 value={formData.slug}
-                onChange={(e) => setFormData({...formData, slug: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="VD: vot-yonex-astrox-99"
               />
@@ -206,7 +206,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 required
                 value={formData.category}
                 // FIX 3: Ép kiểu as FormData['category'] để không bị lỗi Type string
-                onChange={(e) => setFormData({...formData, category: e.target.value as FormData['category']})}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value as FormData['category'] })}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="racket">Vợt Cầu Lông</option>
@@ -224,7 +224,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               <input
                 type="url"
                 value={formData.thumbnail_url}
-                onChange={(e) => setFormData({...formData, thumbnail_url: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, thumbnail_url: e.target.value })}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="https://example.com/image.jpg"
               />
@@ -325,7 +325,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             <textarea
               rows={4}
               value={formData.description}
-              onChange={(e) => setFormData({...formData, description: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Nhập chi tiết về thông số, công năng..."
             ></textarea>

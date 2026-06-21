@@ -38,6 +38,9 @@ const CartSidebar = () => {
   const [currentOrderId, setCurrentOrderId] =
     useState<number | null>(null);
 
+  const [isCheckoutLoading, setIsCheckoutLoading] =
+    useState(false);
+
   const total = cart.reduce(
     (sum, item) =>
       sum +
@@ -60,6 +63,8 @@ const CartSidebar = () => {
         );
         return;
       }
+
+      setIsCheckoutLoading(true);
 
       const res =
         await PosService.createPosOrder({
@@ -98,14 +103,17 @@ const CartSidebar = () => {
           "Đã thanh toán tiền mặt thành công"
         );
 
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+
         return;
       }
 
       /**
        * VNPAY
        */
-      const url =
-        res.data.payment_url;
+      const url = res.data.paymentUrl;
 
       if (!url) {
         message.error(
@@ -125,12 +133,15 @@ const CartSidebar = () => {
       message.info(
         "Vui lòng quét QR để thanh toán"
       );
+
     } catch (error) {
       console.error(error);
 
       message.error(
         "Thanh toán thất bại"
       );
+
+      setIsCheckoutLoading(false);
     }
   };
 
@@ -184,10 +195,16 @@ const CartSidebar = () => {
               message.success(
                 "Thanh toán thành công"
               );
+              
+              setIsCheckoutLoading(false);
 
               clearInterval(
                 interval
               );
+
+              setTimeout(() => {
+                window.location.reload();
+              }, 1500);
             }
           } catch (error) {
             console.error(
@@ -274,7 +291,7 @@ const CartSidebar = () => {
                   updateQuantity(
                     item.variantId,
                     item.quantity -
-                      1
+                    1
                   );
                 }}
               >
@@ -307,7 +324,7 @@ const CartSidebar = () => {
                   updateQuantity(
                     item.variantId,
                     item.quantity +
-                      1
+                    1
                   );
                 }}
               >
@@ -365,8 +382,9 @@ const CartSidebar = () => {
         block
         type="primary"
         size="large"
+        loading={isCheckoutLoading}
         disabled={
-          cart.length === 0
+          cart.length === 0 || isCheckoutLoading
         }
         onClick={
           handleCheckout
@@ -380,11 +398,10 @@ const CartSidebar = () => {
         footer={null}
         centered
         destroyOnClose
-        onCancel={() =>
-          setQrVisible(
-            false
-          )
-        }
+        onCancel={() => {
+          setQrVisible(false);
+          setIsCheckoutLoading(false);
+        }}
       >
         <div
           style={{

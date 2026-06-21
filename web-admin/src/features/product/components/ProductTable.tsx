@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import type { Product, ProductFilter, ProductVariant } from '../types/product.types';
+import type { Product, ProductFilter, ProductVariant, InventoryLevel } from '../types/product.types';
 import { useProducts } from '../hooks/useProducts';
 import { useModal } from '../hooks/useModal';
+import { InventoryService } from '../services/inventory.service';
 import { ProductService } from '../services/product.service';
 import { message, Pagination } from 'antd';
 import { ProductFormModal } from './ProductFormModal';
@@ -11,30 +12,31 @@ import { InventoryAdjustModal } from './InventoryModal';
 export const ProductTable: React.FC = () => {
   // Trạng thái trigger reload danh sách sản phẩm khi hoàn tất thêm/sửa/nhập kho
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
-  
+
   // 🔥 FIX Ở ĐÂY: Tạo 2 state riêng biệt
   // 1. localFilters: Lưu trữ giá trị người dùng ĐANG GÕ (không gọi API)
-  const [localFilters, setLocalFilters] = useState<ProductFilter>({page: 1, limit: 10});
+  const [localFilters, setLocalFilters] = useState<ProductFilter>({ page: 1, limit: 10 });
   // 2. filters: State chính thức để GỌI API (Chỉ cập nhật khi bấm Tìm Kiếm)
-  const [filters, setFilters] = useState<ProductFilter>({page: 1, limit: 10});
+  const [filters, setFilters] = useState<ProductFilter>({ page: 1, limit: 10 });
 
   // Gọi Hook lấy dữ liệu với state filters (chính thức)
-  const { loading, multiVariantList, singleVariantList, refetch } = useProducts(refreshTrigger, filters);
+  const { loading, total, multiVariantList, singleVariantList, refetch } = useProducts(refreshTrigger, filters);
   const allProducts = [...multiVariantList, ...singleVariantList];
 
-  const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
 
   // State quản lý các dòng đang được Mở rộng (Xổ xuống)
   const [expandedRows, setExpandedRows] = useState<number[]>([]);
   const [expandedVariants, setExpandedVariants] = useState<number[]>([]);
-  
+
   const [facilitiesMap, setFacilitiesMap] = useState<Record<number, string>>({});
 
   // Khởi tạo useModal bọc các payload dữ liệu tương ứng
   const productModal = useModal<Product>();
   const variantModal = useModal<{ productId: number; variant?: ProductVariant }>();
   const inventoryModal = useModal<{ variantId: number }>();
+
+  const [variantStocks, setVariantStocks] = useState<Record<number, { id: number; facility_id: number; quantity_on_hand: number; }[]>>({});
 
   useEffect(() => {
     const loadFacilities = async () => {
@@ -52,6 +54,40 @@ export const ProductTable: React.FC = () => {
     loadFacilities();
   }, []);
 
+  const loadVariantStock = async (variantId: number) => {
+    // Đã load rồi thì bỏ qua
+    if (variantStocks[variantId]) return;
+    try {
+      const facilityIds = Object.keys(facilitiesMap).map(Number);
+      const stocks: {
+        id: number;
+        facility_id: number;
+        quantity_on_hand: number;
+      }[] = await Promise.all(
+        facilityIds.map(async (facilityId) => {
+
+          const res = await InventoryService.getVariantStock(
+            facilityId,
+            variantId
+          );
+
+          const stock = res.data as InventoryLevel;
+
+          return {
+            id: stock.id,
+            facility_id: stock.facility_id,
+            quantity_on_hand: stock.quantity_on_hand
+          };
+        })
+      );
+
+      setVariantStocks(prev => ({ ...prev, [variantId]: stocks }));
+    } catch (error) {
+      console.error(error);
+      message.error("Không tải được tồn kho");
+    }
+  };
+
   const toggleVariantExpand = (variantId: number) => {
     setExpandedVariants(prev =>
       prev.includes(variantId)
@@ -60,10 +96,18 @@ export const ProductTable: React.FC = () => {
     );
   };
 
-  const toggleExpandRow = (productId: number) => {
-    setExpandedRows(prev =>
-      prev.includes(productId) ? prev.filter(id => id !== productId) : [...prev, productId]
-    );
+  const toggleExpandRow = (product: Product) => {
+    setExpandedRows(prev => {
+      if (prev.includes(product.id)) {
+        return prev.filter(id => id !== product.id);
+      } else {
+        // Khi mở rộng sản phẩm, tải tồn kho cho tất cả biến thể
+        product.variants?.forEach(variant => {
+          loadVariantStock(variant.id);
+        });
+        return [...prev, product.id];
+      }
+    });
   };
 
   const handleReloadTable = () => {
@@ -96,8 +140,8 @@ export const ProductTable: React.FC = () => {
 
   // Hàm kích hoạt Tìm kiếm
   const handleSearch = () => {
-    setFilters(localFilters); // Chuyển state local sang state gọi API
-    setCurrentPage(1); // Reset lại trang 1
+    setFilters({ ...localFilters, page: 1 }); // Chuyển state local sang state gọi API, reset về trang 1
+    setLocalFilters(prev => ({ ...prev, page: 1 }));
   };
 
   // Hàm Làm mới bộ lọc
@@ -105,28 +149,21 @@ export const ProductTable: React.FC = () => {
     const defaultFilters = { page: 1, limit: 10 };
     setLocalFilters(defaultFilters);
     setFilters(defaultFilters);
-    setCurrentPage(1);
   };
 
   if (loading && refreshTrigger === 0) {
     return <div className="p-10 text-center text-lg text-gray-500 animate-pulse">Đang tải dữ liệu trên sân... 🏸</div>;
   }
 
-  // Dữ liệu hiển thị cho trang hiện tại
-  const paginatedList = allProducts.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE
-  );
-
   return (
     <div className="bg-white shadow-md rounded-lg p-6">
       {/* KHU VỰC HEADER VÀ NÚT THÊM SẢN PHẨM */}
       <div className="flex justify-between items-center mb-6 border-b pb-3">
         <h2 className="text-xl font-bold text-gray-800">
-          Danh sách Sản phẩm ({allProducts.length})
+          Danh sách Sản phẩm ({total})
         </h2>
-        
-        <button 
+
+        <button
           type="button"
           onClick={() => productModal.open()}
           className="bg-blue-600 text-white px-5 py-2 rounded-md shadow font-medium hover:bg-blue-700 transition"
@@ -197,13 +234,13 @@ export const ProductTable: React.FC = () => {
         </select>
 
         {/* Nút Tìm kiếm và Làm mới */}
-        <button 
+        <button
           onClick={handleSearch}
           className="bg-blue-600 text-white px-5 py-2 rounded-md font-medium hover:bg-blue-700 transition shadow-sm ml-auto"
         >
           Tìm kiếm
         </button>
-        <button 
+        <button
           onClick={handleResetFilters}
           className="bg-gray-100 text-gray-700 border border-gray-300 px-5 py-2 rounded-md font-medium hover:bg-gray-200 transition shadow-sm"
         >
@@ -227,18 +264,18 @@ export const ProductTable: React.FC = () => {
             {allProducts.length === 0 && (
               <tr><td colSpan={5} className="p-4 text-center text-gray-500">Chưa có dữ liệu sản phẩm.</td></tr>
             )}
-            
-            {paginatedList.map((product) => {
+
+            {allProducts.map((product) => {
               const isExpanded = expandedRows.includes(product.id);
               const isDeleted = !!product.deleted_at;
-              
+
               return (
                 <React.Fragment key={product.id}>
                   {/* ======================================================== */}
                   {/* DÒNG SẢN PHẨM CHA */}
                   {/* ======================================================== */}
                   <tr className={`hover:bg-blue-50 transition-colors ${isDeleted ? 'opacity-50' : ''}`}>
-                    <td className="px-5 py-4 border-b border-gray-200 text-center cursor-pointer" onClick={() => toggleExpandRow(product.id)}>
+                    <td className="px-5 py-4 border-b border-gray-200 text-center cursor-pointer" onClick={() => toggleExpandRow(product)}>
                       <button type="button" className="text-xl font-bold text-gray-500 hover:text-blue-600">
                         {isExpanded ? '−' : '+'}
                       </button>
@@ -266,25 +303,25 @@ export const ProductTable: React.FC = () => {
                     </td>
                     <td className="px-5 py-4 border-b border-gray-200 text-sm text-center">
                       <div className="flex justify-center gap-2">
-                        <button 
+                        <button
                           type="button"
-                          onClick={() => variantModal.open({ productId: product.id })} 
-                          disabled={isDeleted} 
+                          onClick={() => variantModal.open({ productId: product.id })}
+                          disabled={isDeleted}
                           className="bg-green-100 text-green-700 px-3 py-1 rounded hover:bg-green-200 disabled:opacity-50"
                         >
                           + Thêm Phân Loại
                         </button>
-                        <button 
+                        <button
                           type="button"
-                          onClick={() => productModal.open(product)} 
-                          disabled={isDeleted} 
+                          onClick={() => productModal.open(product)}
+                          disabled={isDeleted}
                           className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded hover:bg-yellow-200 disabled:opacity-50"
                         >
                           Sửa
                         </button>
-                        <button 
+                        <button
                           type="button"
-                          onClick={() => handleToggleProductStatus(product.id)} 
+                          onClick={() => handleToggleProductStatus(product.id)}
                           className="bg-gray-100 text-gray-700 px-3 py-1 rounded hover:bg-gray-200"
                         >
                           {isDeleted ? 'Khôi phục' : 'Xóa'}
@@ -318,7 +355,7 @@ export const ProductTable: React.FC = () => {
                               )}
                               {product.variants?.map(variant => {
                                 const isVariantExpanded = expandedVariants.includes(variant.id);
-                                const inventories = variant.inventory_levels || [];
+                                const inventories = variantStocks[variant.id] || variant.inventory_levels || [];
 
                                 const totalStock = inventories.reduce((sum, item) => sum + item.quantity_on_hand, 0);
                                 const isLowStock = totalStock <= 5;
@@ -331,7 +368,10 @@ export const ProductTable: React.FC = () => {
                                       <td className="px-2 py-2 text-center">
                                         <button
                                           type="button"
-                                          onClick={() => toggleVariantExpand(variant.id)}
+                                          onClick={() => {
+                                            toggleVariantExpand(variant.id);
+                                            loadVariantStock(variant.id);
+                                          }}
                                           className="font-bold text-blue-600"
                                         >
                                           {isVariantExpanded ? "−" : "+"}
@@ -404,7 +444,7 @@ export const ProductTable: React.FC = () => {
                                               <tbody>
                                                 {inventories.length > 0 ? (
                                                   inventories.map((inv) => (
-                                                    <tr key={inv.id} className="border-t">
+                                                    <tr key={inv.facility_id} className="border-t">
                                                       <td className="px-4 py-2">
                                                         {facilitiesMap[inv.facility_id] ?? `CN ${inv.facility_id}`}
                                                       </td>
@@ -444,10 +484,13 @@ export const ProductTable: React.FC = () => {
 
       <div className="border-t pt-4 mt-4 flex justify-center">
         <Pagination
-          current={currentPage}
+          current={filters.page || 1}
           pageSize={PAGE_SIZE}
-          total={allProducts.length}
-          onChange={(page) => setCurrentPage(page)}
+          total={total}
+          onChange={(page) => {
+            setFilters(prev => ({ ...prev, page }));
+            setLocalFilters(prev => ({ ...prev, page }));
+          }}
           showSizeChanger={false}
         />
       </div>
@@ -455,8 +498,8 @@ export const ProductTable: React.FC = () => {
       {/* ========================================================================= */}
       {/* KHU VỰC LỒNG CÁC COMPONENTS POPUP MODALS ĐỂ XỬ LÝ SỰ KIỆN */}
       {/* ========================================================================= */}
-      <ProductFormModal 
-        key={productModal.data?.id || 'new'} 
+      <ProductFormModal
+        key={productModal.data?.id || 'new'}
         open={productModal.isOpen}
         product={productModal.data}
         onClose={productModal.close}
@@ -466,7 +509,7 @@ export const ProductTable: React.FC = () => {
         }}
       />
 
-      <VariantFormModal 
+      <VariantFormModal
         open={variantModal.isOpen}
         productId={variantModal.data?.productId || null}
         variant={variantModal.data?.variant}
@@ -477,7 +520,7 @@ export const ProductTable: React.FC = () => {
         }}
       />
 
-      <InventoryAdjustModal 
+      <InventoryAdjustModal
         open={inventoryModal.isOpen}
         variantId={inventoryModal.data?.variantId || null}
         onClose={inventoryModal.close}

@@ -10,6 +10,7 @@ import { testConnection } from './src/config/database.js';
 import rootRouter from './src/routes/index.js';
 import http from 'http';
 import { initSocket } from './src/config/socket.js';
+import { initCronJobs } from './src/jobs/cron.js';
 
 
 const app: Express = express();
@@ -48,6 +49,9 @@ app.use(errorHandlingMiddleware);
 const startServer = async () => {
     // Test kết nối DB trước
     await testConnection();
+
+    // Khởi tạo các tác vụ nền định kỳ (Cron jobs)
+    initCronJobs();
 
     // Lắng nghe port
     server.listen(PORT, () => {

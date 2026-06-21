@@ -16,6 +16,9 @@ export const useProducts = (
   const [loading, setLoading] =
     useState<boolean>(true);
 
+  const [total, setTotal] =
+    useState<number>(0);
+
   const fetchProducts =
     useCallback(async () => {
       try {
@@ -28,6 +31,7 @@ export const useProducts = (
 
         if (res.success) {
           setProducts(res.data);
+          setTotal(res.total || 0);
         }
       } catch (error) {
         message.error(
@@ -73,6 +77,7 @@ export const useProducts = (
   return {
     products,
     loading,
+    total,
     multiVariantList,
     singleVariantList,
     refetch: fetchProducts

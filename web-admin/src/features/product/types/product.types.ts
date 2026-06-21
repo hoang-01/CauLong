@@ -43,7 +43,7 @@ export interface Product {
   created_at: string;
   updated_at: string;
   deleted_at: string | null; // Để hiển thị nút "Khôi phục" hoặc "Xóa mềm"
-  
+
   // Mối quan hệ: 1 Sản phẩm có nhiều Biến thể
   variants: ProductVariant[];
 }
@@ -69,7 +69,7 @@ export interface CreateProductPayload {
   description?: string;
   thumbnail_url?: string;
   // Cho phép chèn luôn danh sách biến thể ngay lúc tạo sản phẩm cha
-  variants?: VariantPayload[]; 
+  variants?: VariantPayload[];
 }
 
 // Payload khi Admin sửa thông tin chung của Sản phẩm
@@ -87,10 +87,10 @@ export interface AdjustInventoryPayload {
   facility_id: number;
   qty_delta: number;
   reason:
-    | 'import'
-    | 'sale'
-    | 'return'
-    | 'adjustment';
+  | 'import'
+  | 'sale'
+  | 'return'
+  | 'adjustment';
   note?: string;
 }
 
@@ -134,12 +134,12 @@ export interface FormData {
   name: string;
   slug: string;
   category:
-    | 'racket'
-    | 'shuttlecock'
-    | 'shoes'
-    | 'apparel'
-    | 'accessory';
-
+  | 'racket'
+  | 'shuttlecock'
+  | 'shoes'
+  | 'apparel'
+  | 'accessory'
+  | 'soft_drink';
   description: string;
   thumbnail_url: string;
 
@@ -166,11 +166,11 @@ export interface ProductFilter {
   limit?: number;
 
   sort?:
-    | "newest"
-    | "oldest"
-    | "price_asc"
-    | "price_desc"
-    | "rating";
+  | "newest"
+  | "oldest"
+  | "price_asc"
+  | "price_desc"
+  | "rating";
 
   attrs?: Record<string, string>;
 }

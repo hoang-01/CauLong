@@ -262,7 +262,7 @@ export class ProductService {
         };
         }
 
-        // search name / slug
+        // search
         if (search) {
         (productWhere as any)[Op.or] = [
             {
@@ -273,6 +273,11 @@ export class ProductService {
             {
             slug: {
                 [Op.like]: `%${search}%`
+            }
+            },
+            {
+            id: {
+                [Op.in]: sequelize.literal(`(SELECT product_id FROM product_variants WHERE sku LIKE '%${search}%' AND deleted_at IS NULL)`)
             }
             }
         ];
@@ -293,13 +298,6 @@ export class ProductService {
         }
         }
 
-        // search sku
-        if (search) {
-        variantWhere.sku = {
-            [Op.like]: `%${search}%`
-        };
-        }
-
         const products =
         await models.Product.findAndCountAll({
             where: productWhere,
@@ -308,8 +306,8 @@ export class ProductService {
             {
                 model: models.ProductVariant,
                 as: 'variants',
-                required: true,
-                where: variantWhere
+                required: false,
+                where: Object.keys(variantWhere).length > 1 ? variantWhere : { is_active: true }
             }
             ],
 

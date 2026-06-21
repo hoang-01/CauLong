@@ -5,7 +5,7 @@ import { verifyToken } from '../../middlewares/auth.middleware.js';
 
 const router = Router();
 router.use(verifyToken);
-router.use(requireRoles(['staff']));
+router.use(requireRoles(['admin', 'staff']));
 
 router.get(
   '/',
@@ -45,6 +45,16 @@ router.patch(
 router.patch(
   '/:id/pay-cash',
   AdminOrderController.payCash
+);
+
+router.get(
+  '/:id/vnpay-url',
+  AdminOrderController.getVNPayUrl
+);
+
+router.patch(
+  '/:id/refund',
+  AdminOrderController.refundOrder
 );
 
 export default router;

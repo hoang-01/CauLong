@@ -81,37 +81,39 @@ const PosPage = () => {
   );
 
   const handleSelectProduct = (
-  product: PosProduct
-) => {
-  addToCart({
-    variantId:
-      product.variant.id,
+    product: PosProduct
+  ) => {
+    addToCart({
+      variantId:
+        product.variant.id,
 
-    productId:
-      product.variant.product.id,
+      productId:
+        product.variant.product.id,
 
-    productName:
-      product.variant.product.name,
+      productName:
+        product.variant.product.name,
 
-    variantName:
-      Object.entries(
+      variantName:
         product.variant.attributes
-      )
-        .map(
-          ([key, value]) =>
-            `${key}: ${value}`
-        )
-        .join(" | "),
+          ? Object.entries(
+              product.variant.attributes
+            )
+              .map(
+                ([key, value]) =>
+                  `${key}: ${value}`
+              )
+              .join(" | ")
+          : "",
 
-    quantity: 1,
+      quantity: 1,
 
-    price:
-      product.variant.price_cents,
+      price:
+        product.variant.price_cents,
 
-    stock:
-      product.quantity_on_hand,
-  });
-};
+      stock:
+        product.quantity_on_hand,
+    });
+  };
 
   return (
     <Row gutter={16}>

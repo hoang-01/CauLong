@@ -1,11 +1,7 @@
-import {
-  Modal,
-  List,
-  Button,
-  message,
-} from "antd";
+import { Modal, List, Button, message } from "antd";
 import { useEffect, useState } from "react";
 import { PosService } from "../services/sale.api";
+import type { Order } from "../types/sale.types";
 
 interface Props {
   open: boolean;
@@ -17,19 +13,18 @@ export default function PendingPaymentOrders({
   onClose,
 }: Props) {
   const [orders, setOrders] =
-    useState<unknown[]>([]);
+    useState<Order[]>([]);
 
-  const loadOrders =
-    async () => {
-      try {
-        const res =
-          await PosService.getPendingPaymentOrders();
+  const loadOrders = async () => {
+    try {
+      const res =
+        await PosService.getPendingPayment();
 
-        setOrders(res.data);
-      } catch (error) {
-        console.error(error);
-      }
-    };
+      setOrders(res.data); // hoặc res.data.data
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -38,28 +33,25 @@ export default function PendingPaymentOrders({
     }
   }, [open]);
 
-  const handlePayCash =
-    async (
-      orderId: number
-    ) => {
-      try {
-        await PosService.payCash(
-          orderId
-        );
+  const handlePayCash = async (
+    orderId: number
+  ) => {
+    try {
+      await PosService.payCash(orderId);
 
-        message.success(
-          "Thanh toán thành công"
-        );
+      message.success(
+        "Thanh toán thành công"
+      );
 
-        loadOrders();
-      } catch (error) {
-        console.error(error);
+      loadOrders();
+    } catch (error) {
+      console.error(error);
 
-        message.error(
-          "Thanh toán thất bại"
-        );
-      }
-    };
+      message.error(
+        "Thanh toán thất bại"
+      );
+    }
+  };
 
   return (
     <Modal
@@ -74,11 +66,10 @@ export default function PendingPaymentOrders({
           <List.Item
             actions={[
               <Button
+                key="pay"
                 type="primary"
                 onClick={() =>
-                  handlePayCash(
-                    order.id
-                  )
+                  handlePayCash(order.id)
                 }
               >
                 Thanh toán
@@ -87,15 +78,12 @@ export default function PendingPaymentOrders({
           >
             <div>
               <div>
-                Đơn #
-                {
-                  order.id
-                }
+                Đơn #{order.id}
               </div>
 
               <div>
                 {Number(
-                  order.total_amount
+                  order.total_cents
                 ).toLocaleString()}
                 đ
               </div>

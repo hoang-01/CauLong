@@ -299,14 +299,21 @@ export class PaymentService {
                     }
                 );
 
+                const updateData: any = {
+                    status: 'pending_pickup'
+                };
+                if (!order.reservation_expires_at) {
+                    updateData.reservation_expires_at = new Date(order.created_at.getTime() + 24 * 60 * 60 * 1000);
+                }
+                if (!order.pickup_time) {
+                    updateData.pickup_time = new Date(order.created_at.getTime() + 4 * 60 * 60 * 1000);
+                }
+
                 /**
                  * Chuyển sang chờ giao hàng
                  */
                 await order.update(
-                    {
-                        status:
-                            'pending_pickup'
-                    },
+                    updateData,
                     {
                         transaction: t
                     }
