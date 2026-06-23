@@ -120,4 +120,9 @@ export const cancelOrder = async (orderId) => {
     return response.data.data;
 };
 
+export const cancelBooking = async (bookingId) => {
+    const response = await api.patch(`/app/bookings/${bookingId}/cancel`);
+    return response.data.data;
+};
+
 export default api;

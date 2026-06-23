@@ -3,7 +3,7 @@ import type { Request, Response, NextFunction } from "express";
 
 
 export class PaymentController {
-    
+
     // API Hứng Webhook từ VNPay
     static async vnpayIpn(
         req: Request,
@@ -51,8 +51,6 @@ export class PaymentController {
 
             // Gọi Service để lấy chuỗi HTML
             const htmlContent = PaymentService.getVNPayReturnHtml(req.query);
-            
-            // Trả thẳng HTML về cho trình duyệt
             return res.send(htmlContent);
         } catch (error) {
             next(error);
