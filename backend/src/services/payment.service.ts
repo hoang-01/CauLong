@@ -1,16 +1,18 @@
 import models from '../models/index.js';
 import { VNPayUtils } from '../utils/vnpay.js';
-import { Op } from 'sequelize'; 
+import sequelize from '../config/database.js';
+import { InventoryService } from './inventory.service.js';
+import { Op } from 'sequelize';
 
 export class PaymentService {
     static async processVNPayIPN(vnpayQuery: any) {
         // 1. Xác thực chữ ký VNPay
-        const isValidSignature = VNPayUtils.verifyIpnSignature(vnpayQuery); 
+        const isValidSignature = VNPayUtils.verifyIpnSignature(vnpayQuery);
         if (!isValidSignature) {
             return { RspCode: '97', Message: 'Checksum failed' };
         }
 
-        const vnp_TxnRef = vnpayQuery.vnp_TxnRef as string; 
+        const vnp_TxnRef = vnpayQuery.vnp_TxnRef as string;
         const vnp_ResponseCode = vnpayQuery.vnp_ResponseCode;
         const vnp_Amount = Number(vnpayQuery.vnp_Amount) / 100; // VNPay gửi về nhân 100, phải chia ra
 
@@ -85,7 +87,7 @@ export class PaymentService {
         const t = await models.Booking.sequelize!.transaction();
         try {
             const booking = await (models.Booking as any).findByPk(bookingId, { transaction: t });
-            
+
             if (!booking) {
                 await t.rollback();
                 return { RspCode: '01', Message: 'Order not found' };
@@ -103,7 +105,7 @@ export class PaymentService {
                 // --- THÀNH CÔNG ---
                 await booking.update({
                     payment_status: 'paid',
-                    status: 'confirmed' 
+                    status: 'confirmed'
                 }, { transaction: t });
 
                 await (models.Payment as any).create({
@@ -223,6 +225,244 @@ export class PaymentService {
             }
         } catch (error) {
             console.error("[Cron Payment] Lỗi quét giao dịch VNPay hết hạn:", error);
+        }
+    }
+
+    static async processPosOrderVNPayIPN(
+        vnpayQuery: any
+    ) {
+        const isValidSignature =
+            VNPayUtils.verifyIpnSignature(
+                vnpayQuery
+            );
+
+        if (!isValidSignature) {
+            return {
+                RspCode: '97',
+                Message: 'Checksum failed'
+            };
+        }
+
+        const vnp_TxnRef =
+            vnpayQuery.vnp_TxnRef;
+
+        const vnp_ResponseCode =
+            vnpayQuery.vnp_ResponseCode;
+
+        const paidAmount =
+            Number(
+                vnpayQuery.vnp_Amount
+            ) / 100;
+
+        const t =
+            await sequelize.transaction();
+
+        try {
+            /**
+             * ORDER_15
+             * => 15
+             */
+            const orderId =
+                Number(
+                    vnp_TxnRef.replace(
+                        'ORDER_',
+                        ''
+                    )
+                );
+
+            const order =
+                await models.Order.findByPk(
+                    orderId,
+                    {
+                        transaction: t
+                    }
+                );
+
+            if (!order) {
+                await t.rollback();
+
+                return {
+                    RspCode: '01',
+                    Message:
+                        'Order not found'
+                };
+            }
+
+            const payment =
+                await models.Payment.findOne({
+                    where: {
+                        order_id:
+                            order.id
+                    },
+                    transaction: t
+                });
+
+            if (!payment) {
+                await t.rollback();
+
+                return {
+                    RspCode: '01',
+                    Message:
+                        'Payment not found'
+                };
+            }
+
+            /**
+             * Tránh IPN gửi lại
+             */
+            if (
+                payment.status ===
+                'paid'
+            ) {
+                await t.rollback();
+
+                return {
+                    RspCode: '02',
+                    Message:
+                        'Order already confirmed'
+                };
+            }
+
+            /**
+             * Chỉ xử lý đơn đang chờ thanh toán
+             */
+            if (
+                order.status !==
+                'pending_payment'
+            ) {
+                await t.rollback();
+
+                return {
+                    RspCode: '02',
+                    Message:
+                        'Order already processed'
+                };
+            }
+
+            /**
+             * Validate số tiền
+             */
+            if (
+                payment.amount_cents !==
+                paidAmount
+            ) {
+                await t.rollback();
+
+                return {
+                    RspCode: '04',
+                    Message:
+                        'Invalid amount'
+                };
+            }
+
+            /**
+             * Thanh toán thành công
+             */
+            if (
+                vnp_ResponseCode === '00'
+            ) {
+                const orderItems =
+                    await models.OrderItem.findAll({
+                        where: {
+                            order_id:
+                                order.id
+                        },
+                        transaction: t
+                    });
+
+                /**
+                 * Trừ kho
+                 */
+                const adjustments = orderItems.map(item => ({
+                    variant_id: item.variant_id,
+                    facility_id: order.facility_id,
+                    qty_delta: -item.quantity,
+                    reason: 'sale' as const,
+                    ref_order_id: order.id
+                }));
+                await InventoryService.bulkAdjustInventory(adjustments, { transaction: t });
+
+                /**
+                 * Cập nhật Payment
+                 */
+                await payment.update(
+                    {
+                        status: 'paid',
+
+                        provider_ref:
+                            vnpayQuery.vnp_TransactionNo,
+
+                        paid_at:
+                            new Date()
+                    },
+                    {
+                        transaction: t
+                    }
+                );
+
+                const updateData: any = {
+                    status: 'pending_pickup'
+                };
+                if (!order.reservation_expires_at) {
+                    updateData.reservation_expires_at = new Date(order.created_at.getTime() + 24 * 60 * 60 * 1000);
+                }
+                if (!order.pickup_time) {
+                    updateData.pickup_time = new Date(order.created_at.getTime() + 4 * 60 * 60 * 1000);
+                }
+
+                /**
+                 * Chuyển sang chờ giao hàng
+                 */
+                await order.update(
+                    updateData,
+                    {
+                        transaction: t
+                    }
+                );
+            } else {
+                /**
+                 * Thanh toán thất bại
+                 */
+                await payment.update(
+                    {
+                        status:
+                            'failed',
+
+                        provider_ref:
+                            vnpayQuery.vnp_TransactionNo ||
+                            null
+                    },
+                    {
+                        transaction: t
+                    }
+                );
+
+                /**
+                 * Giữ nguyên pending_payment
+                 * để khách có thể thanh toán lại
+                 */
+            }
+
+            await t.commit();
+
+            return {
+                RspCode: '00',
+                Message:
+                    'Confirm Success'
+            };
+        } catch (error) {
+            await t.rollback();
+
+            console.error(
+                'POS VNPay IPN Error:',
+                error
+            );
+
+            return {
+                RspCode: '99',
+                Message:
+                    'Unknown error'
+            };
         }
     }
 }
