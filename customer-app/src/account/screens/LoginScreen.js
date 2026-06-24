@@ -20,8 +20,8 @@ export default function LoginScreen({ navigation }) {
     setLoading(true);
     try {
       const data = await login(email, password);
-      // data thường chứa { user, token }
-      setUser(data.user, data.token);
+      // data thường chứa { user, token } hoặc { user, accessToken }
+      setUser(data.user, data.accessToken || data.token);
       // navigation.replace('HomeTab'); // Nếu lồng vào Stack thì dùng replace hoặc reset
     } catch (error) {
       console.error('Lỗi đăng nhập:', error);

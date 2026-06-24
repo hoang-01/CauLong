@@ -38,7 +38,7 @@ export default function RegisterScreen({ navigation }) {
           { 
             text: 'OK', 
             onPress: () => {
-                setUser(data.user, data.token);
+                setUser(data.user, data.accessToken || data.token);
             } 
           }
       ]);
