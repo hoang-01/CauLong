@@ -13,12 +13,25 @@ export class UserService {
     }
 
     static async createGuestUser(phone: string, fullName: string, membershipType: 'standard' | 'student' | 'vip' = 'standard') {
+        const existingPhone = await models.User.findOne({
+            where: { phone, role: 'customer' }
+        });
+        if (existingPhone) {
+            throw new ApiError('Số điện thoại khách hàng này đã tồn tại trên hệ thống!', 400);
+        }
+
+        const dummyEmail = `guest_${phone}@thethaovip.local`; 
+
+        const existingEmail = await models.User.findOne({
+            where: { email: dummyEmail }
+        });
+        if (existingEmail) {
+            throw new ApiError('Tài khoản khách vãng lai với số điện thoại này đã tồn tại trên hệ thống!', 400);
+        }
 
         const randomPassword = Math.random().toString(36).slice(-8);
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(randomPassword, salt);
-
-        const dummyEmail = `guest_${phone}@thethaovip.local`; 
 
         return await models.User.create({
             email: dummyEmail,

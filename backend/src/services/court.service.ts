@@ -31,6 +31,7 @@ export class CourtService {
         });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     static async getCourtById(id: number) {
         const court = await models.Court.findOne({
             where: {id: id, is_active: true },
@@ -68,7 +69,7 @@ export class CourtService {
             }
         });
         if(existingCourt){
-            if(existingCourt.is_active){
+            if(!existingCourt.is_active){
                 await existingCourt.update({ ...data, is_active: true});
                 return existingCourt;
             }

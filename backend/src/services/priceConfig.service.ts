@@ -42,6 +42,10 @@ export class PriceConfigService {
     }
 
     private static async checkTimeOverlap(facilityId: number, courtType: string, startTime: string, endTime: string, excludeId?: number) {
+        if (startTime >= endTime) {
+            throw new ApiError('Giờ kết thúc phải lớn hơn giờ bắt đầu', 400);
+        }
+
         const court = await models.Court.findOne({
             where: { 
                 facility_id: facilityId,
