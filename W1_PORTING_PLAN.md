@@ -87,8 +87,8 @@ docs/             12 file (bo cu, thieu 08-revenue-module-plan.md)
 | A4 | **Holiday Frontend** | features/holiday/ day du | Khong co gi | Toan bo features/holiday/ | Co | **Cao** | web-admin/src/features/holiday/ | Tao moi | Can them route /holidays vao web-admin/src/routes/index.tsx | — |
 | A5 | **SystemConfig backend** | systemConfig.route.ts, systemConfig.controller.ts, systemConfig.service.ts, systemConfig.repository.ts, SystemConfig model | Khong co gi | Toan bo SystemConfig backend | Co | **Cao** | routes/admin/systemConfig.route.ts, models/system_config.model.ts | Tao moi | PricingService doc STUDENT_DISCOUNT_PERCENT va WEEKEND_SURCHARGE_PERCENT tu SystemConfig — neu khong co thi pricing fallback ve 0 | SystemConfig anh huong truc tiep den Strategy pricing |
 | A6 | **SystemConfig Frontend** | features/systemConfig/ day du | Khong co gi | Toan bo features/systemConfig/ | Co | **Cao** | web-admin/src/features/systemConfig/ | Tao moi | Can them route /system-configs vao routes | — |
-| A7 | **Pattern layer (Strategy + Factory)** | patterns/strategies/pricing/ (7 file: standard, weekend, vip, student, holiday, context, interface), patterns/strategies/payment/ (3 file), patterns/factories/ (2 file) | Khong co gi | Toan bo patterns/ | Co | **Cao** | backend/src/patterns/ (toan bo) | Tao moi backend/src/patterns/ | PricingService cua QuanLySanCauLong da dung Strategy+Factory. CauLong van dung PricingService.calculateFromConfigs() don gian | Day la diem khac biet kien truc lon nhat giua 2 repo |
-| A8 | **Repository layer** | repositories/ (17 file) | Khong co gi | Toan bo repositories/ | **Can nhac** | **Trung binh** | backend/src/repositories/ (toan bo) | Tao moi (hoac khong port) | Repository layer tach biet hoan toan voi cach CauLong dang dung models.* truc tiep | **Khuyen nghi:** chi port nhung repository ma cac service moi (revenue, holiday, systemConfig) can |
+| A7 | **Pattern layer (Strategy + Factory)** | patterns/strategies/pricing/ (7 file: standard, weekend, vip, student, holiday, context, interface), patterns/strategies/payment/ (3 file), patterns/factories/ (2 file) | Khong co gi | Toan bo patterns/ | Co | **Cao** | backend/src/patterns/ (toan bo) | Tao moi backend/src/patterns/ | Strategy/Factory pricing không phụ thuộc Repository layer | **Quyết định:** Port Strategy & Factory cho Pricing, dùng Sequelize models trực tiếp/Redis để lấy dữ liệu config. |
+| A8 | **Repository layer** | repositories/ (17 file) | Khong co gi | Toan bo repositories/ | **Không** | **Thấp** | backend/src/repositories/ (tối thiểu) | Chỉ tạo tối thiểu `revenue.repository.ts` nếu cần | Tránh ảnh hưởng diện rộng đến các service cũ của team | **Quyết định:** Không port toàn bộ Repository layer. Các service cũ (booking, court, facility) giữ nguyên models.* trực tiếp. |
 | A9 | **Payment sync: VNPay IPN cap nhat payment_method** | booking.service.ts L225: payment_method: 'vnpay' duoc set khi VNPay thanh cong | payment.service.ts: KHONG set payment_method | VNPay IPN khong cap nhat booking.payment_method | Co | **Cao** | services/payment.service.ts L220-226 | backend/src/services/payment.service.ts (CauLong) | Booking model CauLong CHUA CO cot payment_method — phai them model truoc | **BUG NGHIEM TRONG**: booking.payment_method = null sau khi VNPay thanh cong |
 | A10 | **Booking model: cot payment_method** | booking.model.ts: co payment_method: 'cash' or 'vnpay' voi default 'cash' | booking.model.ts: KHONG co cot payment_method | Thieu field payment_method trong model va DB | Co | **Cao** | models/booking.model.ts | backend/src/models/booking.model.ts | Can migration DB de them cot | **Database breaking change**: can them cot vao bang bookings truoc khi deploy |
 | A11 | **Payment sync: cash tao payment record** | booking.service.ts L350-372: khi cap nhat payment_status='paid' voi payment_method='cash', tu dong tao Payment record provider='cash' | booking.service.ts: KHONG co logic nay | Thanh toan tien mat khong tao payment record — Revenue API khong dem duoc | Co | **Cao** | services/booking.service.ts L350-372 | backend/src/services/booking.service.ts | Phu thuoc A10 (can cot payment_method truoc) | Anh huong truc tiep den du lieu revenue |
@@ -97,7 +97,7 @@ docs/             12 file (bo cu, thieu 08-revenue-module-plan.md)
 | A14 | **Auth: refresh-token & logout** | auth.routes.ts: co /refresh-token va /logout; auth.controller.ts: co refreshToken() va logout() dung cookie HttpOnly | auth.routes.ts: CHI co /login; auth.controller.ts: CHI co login() | Thieu refresh token rotation va logout | Co | **Cao** | routes/admin/auth.routes.ts, controllers/admin/auth.controller.ts, services/auth.service.ts | Cac file tuong ung trong CauLong | auth.service.ts CauLong can kiem tra co du refreshAccessToken() va logout() chua | Lien quan bao mat — nen port toan bo auth controller |
 | A15 | **User model: membership_type** | user.model.ts: co membership_type: 'standard' / 'student' / 'vip' | user.model.ts: CO loyalty_points nhung KHONG co membership_type | Thieu membership_type — PricingService khong the ap dung Student/VIP discount | Co | **Cao** | models/user.model.ts | backend/src/models/user.model.ts | Can ALTER TABLE users them cot membership_type | Anh huong PricingStrategy va createBookingByHotline |
 | A16 | **Booking hotline: membership_type field** | booking.validation.ts createBookingByHotlineSchema: co membership_type field | booking.validation.ts: KHONG co membership_type trong hotline schema | Staff khong the chi dinh loai thanh vien khi dat hotline | Co | **Trung binh** | validations/booking.validation.ts L57 | backend/src/validations/booking.validation.ts | Phu thuoc A15 | Can update ca controller logic |
-| A17 | **PricingService: Strategy Pattern + Holiday/VIP/Student/Weekend** | pricing.service.ts: Dung PricingStrategyFactory, tich hop holiday check, membership, weekend surcharge tu SystemConfig | pricing.service.ts: Dung calculateFromConfigs() don gian, KHONG co Strategy Pattern, KHONG check holiday, KHONG check membership | Thieu toan bo logic pricing thong minh | Co | **Cao** | services/pricing.service.ts, patterns/ (toan bo) | backend/src/services/pricing.service.ts | Port PricingService can port ca patterns/ truoc (A7) | Day la breaking change lon voi pricing — sau khi port, gia tinh co the thay doi |
+| A17 | **PricingService: Strategy Pattern + Holiday/VIP/Student/Weekend** | pricing.service.ts: Dung PricingStrategyFactory, tich hop holiday check, membership, weekend surcharge tu SystemConfig | pricing.service.ts: Dung calculateFromConfigs() don gian, KHONG co Strategy Pattern, KHONG check holiday, KHONG check membership | Thieu toan bo logic pricing thong minh | Co | **Cao** | services/pricing.service.ts, patterns/ (toan bo) | backend/src/services/pricing.service.ts | PricingService phối hợp các strategy không qua repository | **Luồng hoạt động:** Lấy price_config từ Redis/DB -> Lấy holiday/system_config nếu cần -> Gọi PricingStrategyFactory -> Áp dụng strategies. |
 | A18 | **Seeders** | seeders/init.seeder.ts (seed holiday, systemConfig, admin/staff accounts) | Khong co | Init seeder | Co | **Trung binh** | backend/src/seeders/init.seeder.ts | Tao moi backend/src/seeders/ | Chi chay 1 lan — dam bao idempotent | Can seed holiday va systemConfig de pricing hoat dong |
 | A19 | **Docs W1 bo sung** | docs/08-revenue-module-plan.md, docs/03-backend-api.md (day du hon) | Thieu 08-revenue-module-plan.md, docs cu | Tai lieu revenue, database schema moi | Co | **Thap** | docs/08-revenue-module-plan.md | docs/ trong CauLong | Khong anh huong code | Chi can copy |
 
@@ -124,7 +124,7 @@ docs/             12 file (bo cu, thieu 08-revenue-module-plan.md)
 
 | STT | Chuc nang | Ly do khong port | Rui ro neu port |
 |-----|-----------|-----------------|----------------|
-| C1 | redis.ts config | CauLong khong dung Redis (khong thay references) | Them dependency khong can thiet |
+| C1 | redis.ts config | Được phép dùng nếu phục vụ cache có mục đích rõ ràng | Tránh dùng Redis cho mọi thứ một cách mặc định | **Quyết định:** Cho phép dùng Redis để cache price_config, system_config, holiday. |
 | C2 | Order/Inventory backend (W2) | Thuoc W2 — CauLong co rieng tu dong doi | Conflict voi code W2 hien co |
 | C3 | Product backend (W2) | Thuoc W2 — CauLong co rieng | Conflict |
 | C4 | features/sale/ (POS, OrderPage) | W2 — co the xung dot voi implementation CauLong | Conflict |
@@ -172,8 +172,8 @@ docs/             12 file (bo cu, thieu 08-revenue-module-plan.md)
 
 ## 5. Danh Sach Chuc Nang Khong Nen Port
 
-- Toan bo nhom C (xem Bang Gap Analysis Nhom C)
-- Repository layer toan bo (A8) — chi port repository cua revenue, holiday, systemConfig
+- Toan bo nhom C (xem Bang Gap Analysis Nhom C - ngoại trừ Redis được dùng có điều kiện cho caching)
+- Không port toàn bộ Repository layer (A8) — Chỉ tạo repository tối thiểu cho các feature mới nếu thật sự cần (ví dụ: `revenue.repository.ts` cho Revenue query phức tạp). Các service cũ giữ nguyên Service layer hiện tại của CauLong.
 - customer-app va client routes (Nhom D)
 
 ---
@@ -194,361 +194,6 @@ docs/             12 file (bo cu, thieu 08-revenue-module-plan.md)
 
 ## 7. Ke Hoach Port Theo Task Nho
 
-### T-W1-PORT-0: Chuan bi va kiem tra build hien tai
-
-**Muc tieu:** Dam bao CauLong build OK truoc khi port bat ky thu gi
-
-**File du kien sua:** Khong co
-
-**File khong duoc dung:** Tat ca
-
-**Dieu kien hoan thanh:**
-- [ ] `cd backend && npm run build` thanh cong (khong co TypeScript error)
-- [ ] `cd web-admin && npm run build` thanh cong
-- [ ] Document lai danh sach loi build hien tai (neu co)
-- [ ] Ghi lai git status (commit hien tai)
-
-**Lenh test:**
-```bash
-cd D:\KTVTKPM\CauLong\backend
-npx tsc --noEmit
-
-cd D:\KTVTKPM\CauLong\web-admin
-npm run build
-```
-
-**Rui ro:** Neu build dang fail tu truoc — can fix truoc khi port de phan biet loi cu/moi
-
----
-
-### T-W1-PORT-1: Port bug fixes W1 (khong them dependency moi)
-
-**Muc tieu:** Fix 3 bug nho khong can them model/table moi
-
-**File du kien sua:**
-- `backend/src/routes/admin/facility.route.ts` — fix RBAC (B1)
-- `backend/src/services/court.service.ts` — fix deleteCourt dung sai method (B2)
-- `backend/src/routes/admin/booking.route.ts` — them /daily-booked-slots route (A13)
-- `backend/src/controllers/admin/booking.controller.ts` — them getDailyBooked method
-- `backend/src/validations/booking.validation.ts` — import getDailyBookedSchema (da co san)
-
-**File khong duoc dung:** Tat ca file khac, customer-app
-
-**Dieu kien hoan thanh:**
-- [ ] Facility route: staff khong the POST/PUT/DELETE/restore
-- [ ] Court delete: hoat dong dung
-- [ ] GET /api/v1/admin/bookings/daily-booked-slots?facility_id=1&date=2026-06-24&court_type=standard tra ve 200
-
-**Lenh test:**
-```bash
-npx tsc --noEmit
-```
-
-**Rui ro:** Thap — chi sua logic nho, khong them model
-
----
-
-### T-W1-PORT-2: Them cot DB — booking.payment_method + user.membership_type
-
-**Muc tieu:** Them 2 cot DB can thiet cho payment sync va pricing
-
-**File du kien sua:**
-- `backend/src/models/booking.model.ts` — them payment_method field (A10)
-- `backend/src/models/user.model.ts` — them membership_type field (A15)
-
-**File khong duoc dung:** Tat ca file khac
-
-**Dieu kien hoan thanh:**
-- [ ] TypeScript compile OK
-- [ ] Sequelize sync them cot vao DB hoac viet migration SQL rieng
-- [ ] booking.payment_method default 'cash'
-- [ ] user.membership_type default 'standard'
-
-**SQL migration (neu khong dung sync):**
-```sql
-ALTER TABLE bookings ADD COLUMN payment_method ENUM('cash','vnpay') DEFAULT 'cash';
-ALTER TABLE users ADD COLUMN membership_type ENUM('standard','student','vip') DEFAULT 'standard';
-```
-
-**Rui ro:** **Database breaking change** — backup DB truoc khi chay migration
-
----
-
-### T-W1-PORT-3: Port payment sync (cash + VNPay)
-
-**Muc tieu:** Dam bao Payment record duoc tao dung cho ca cash va VNPay
-
-**File du kien sua:**
-- `backend/src/services/booking.service.ts` — them logic tao Payment record khi payment_status=paid + payment_method=cash (A11)
-- `backend/src/services/payment.service.ts` — them payment_method: 'vnpay' khi VNPay IPN success (A9)
-- `backend/src/validations/booking.validation.ts` — them membership_type vao hotline schema (A16)
-
-**File khong duoc dung:** customer-app, client routes
-
-**Dieu kien hoan thanh:**
-- [ ] Dat san hotline + cap nhat status -> paid -> Payment record ton tai voi provider='cash'
-- [ ] VNPay IPN callback -> booking.payment_method = 'vnpay'
-- [ ] TypeScript compile OK
-
-**Rui ro:** Trung binh — logic trong transaction, can test ky rollback
-
----
-
-### T-W1-PORT-4: Port UserService (membership + points + createStaff)
-
-**Muc tieu:** UserService CauLong du chuc nang de support pricing va hotline
-
-**File du kien sua:**
-- `backend/src/services/user.service.ts` — merge/thay the toan bo (B8)
-
-**Dieu kien hoan thanh:**
-- [ ] createGuestUser() nhan membershipType parameter
-- [ ] addPointsAndUpgrade() ton tai
-- [ ] createStaff() ton tai (neu co route)
-- [ ] TypeScript compile OK
-
-**Rui ro:** createGuestUser thay doi signature — can kiem tra tat ca noi goi ham nay
-
----
-
-### T-W1-PORT-5: Port Holiday + SystemConfig backend
-
-**Muc tieu:** Co API CRUD holiday va systemConfig
-
-**File du kien sua (tat ca TẠO MOI):**
-- `backend/src/models/holiday.model.ts`
-- `backend/src/models/system_config.model.ts`
-- `backend/src/models/index.ts` — import Holiday, SystemConfig; them export
-- `backend/src/services/holiday.service.ts`
-- `backend/src/services/systemConfig.service.ts`
-- `backend/src/routes/admin/holiday.route.ts`
-- `backend/src/routes/admin/systemConfig.route.ts`
-- `backend/src/controllers/admin/holiday.controller.ts`
-- `backend/src/controllers/admin/systemConfig.controller.ts`
-- `backend/src/validations/holiday.validation.ts`
-- `backend/src/validations/systemConfig.validation.ts`
-- `backend/src/routes/index.ts` — them holiday va systemConfig routes
-
-**Migration DB:**
-```sql
-CREATE TABLE IF NOT EXISTS holidays (...);
-CREATE TABLE IF NOT EXISTS system_configs (...);
-```
-
-**Dieu kien hoan thanh:**
-- [ ] GET /api/v1/admin/holidays tra ve 200
-- [ ] GET /api/v1/admin/system-configs tra ve 200
-- [ ] TypeScript compile OK
-
-**Rui ro:** Trung binh — can tao bang DB moi
-
----
-
-### T-W1-PORT-6: Port Strategy Pattern pricing
-
-**Muc tieu:** PricingService dung Strategy Pattern va tich hop Holiday/VIP/Student/Weekend
-
-**File du kien sua (TAO MOI):**
-- `backend/src/patterns/strategies/pricing/pricing.strategy.ts` (interface)
-- `backend/src/patterns/strategies/pricing/pricing.context.ts`
-- `backend/src/patterns/strategies/pricing/standard-pricing.strategy.ts`
-- `backend/src/patterns/strategies/pricing/weekend-pricing.strategy.ts`
-- `backend/src/patterns/strategies/pricing/holiday-pricing.strategy.ts`
-- `backend/src/patterns/strategies/pricing/vip-pricing.strategy.ts`
-- `backend/src/patterns/strategies/pricing/student-pricing.strategy.ts`
-- `backend/src/patterns/factories/pricing-strategy.factory.ts`
-- `backend/src/patterns/strategies/payment/payment.strategy.ts`
-- `backend/src/patterns/strategies/payment/cash.strategy.ts`
-- `backend/src/patterns/strategies/payment/vnpay.strategy.ts`
-- `backend/src/patterns/factories/payment.factory.ts`
-
-**File du kien sua (THAY DOI):**
-- `backend/src/services/pricing.service.ts` — thay bang version dung Strategy + Factory
-
-**Can co truoc:** T-W1-PORT-5 (Holiday va SystemConfig phai ton tai)
-
-**Dieu kien hoan thanh:**
-- [ ] Dat san ngay le -> gia co phu thu
-- [ ] User membership_type='student' -> gia co giam gia
-- [ ] TypeScript compile OK
-
-**Rui ro:** **Cao** — thay doi toan bo pricing logic, anh huong moi booking
-
----
-
-### T-W1-PORT-7: Port Repository layer cho Revenue (minimal)
-
-**Muc tieu:** Tao chi nhung repository ma Revenue can
-
-**File du kien sua (TAO MOI — toi thieu):**
-- `backend/src/repositories/base.repository.ts`
-- `backend/src/repositories/revenue.repository.ts`
-- `backend/src/repositories/holiday.repository.ts` (neu chua co tu T5)
-- `backend/src/repositories/systemConfig.repository.ts` (neu chua co tu T5)
-
-**Ghi chu:** KHONG port toan bo repository layer — chi port nhung gi Revenue can. Cac service khac (booking, court, facility) cua CauLong van dung models.* truc tiep.
-
-**Rui ro:** Thap neu chi tao moi file, khong sua file cu
-
----
-
-### T-W1-PORT-8: Port Revenue backend
-
-**Muc tieu:** 4 API revenue hoat dong
-
-**File du kien sua (TAO MOI):**
-- `backend/src/services/revenue.service.ts`
-- `backend/src/controllers/admin/revenue.controller.ts`
-- `backend/src/routes/admin/revenue.route.ts`
-- `backend/src/validations/revenue.validation.ts`
-- `backend/src/routes/index.ts` — them revenue route
-
-**Can co truoc:** T-W1-PORT-3 (payment sync), T-W1-PORT-7 (revenue repository)
-
-**Dieu kien hoan thanh:**
-- [ ] GET /api/v1/admin/revenue/summary tra ve 200
-- [ ] GET /api/v1/admin/revenue/chart tra ve 200
-- [ ] GET /api/v1/admin/revenue/breakdown tra ve 200
-- [ ] GET /api/v1/admin/revenue/transactions tra ve 200
-- [ ] TypeScript compile OK
-
-**Rui ro:** Revenue service phuc tap (9KB) — can test ky query
-
----
-
-### T-W1-PORT-9: Port Auth (refresh-token + logout)
-
-**Muc tieu:** Web admin co dang nhap an toan voi refresh token
-
-**File du kien sua:**
-- `backend/src/routes/admin/auth.routes.ts` — them /refresh-token, /logout
-- `backend/src/controllers/admin/auth.controller.ts` — them refreshToken(), logout()
-- `backend/src/services/auth.service.ts` — kiem tra va bo sung neu thieu
-
-**Dieu kien hoan thanh:**
-- [ ] POST /api/v1/admin/auth/refresh-token tra ve token moi
-- [ ] POST /api/v1/admin/auth/logout xoa token
-
-**Rui ro:** Trung binh — lien quan bao mat, test ky
-
----
-
-### T-W1-PORT-10: Port Holiday + SystemConfig frontend
-
-**Muc tieu:** Web admin co trang quan ly holiday va system config
-
-**File du kien sua (TAO MOI):**
-- `web-admin/src/features/holiday/` (toan bo tu QuanLySanCauLong)
-- `web-admin/src/features/systemConfig/` (toan bo tu QuanLySanCauLong)
-
-**File du kien sua (THAY DOI):**
-- `web-admin/src/routes/index.tsx` — them import va routes cho holiday, systemConfig
-
-**Dieu kien hoan thanh:**
-- [ ] Trang /holidays load va show danh sach holiday
-- [ ] Trang /system-configs load va show danh sach config
-
-**Rui ro:** Thap — chi UI, khong anh huong data
-
----
-
-### T-W1-PORT-11: Port Revenue frontend
-
-**Muc tieu:** Web admin co trang Revenue la trang mac dinh
-
-**File du kien sua (TAO MOI):**
-- `web-admin/src/features/revenue/` (toan bo)
-
-**File du kien sua (THAY DOI):**
-- `web-admin/src/routes/index.tsx` — trang "/" chuyen tu DashboardPage mock sang RevenuePage
-
-**Dieu kien hoan thanh:**
-- [ ] Trang "/" hien thi RevenuePage
-- [ ] Charts va tables load duoc du lieu tu API
-- [ ] Filter theo date va facility hoat dong
-
-**Rui ro:** Thap — chi UI, phu thuoc T-W1-PORT-8
-
----
-
-### T-W1-PORT-12: Port Booking UI fixes (CreateBookingModal + diff)
-
-**Muc tieu:** Dong bo UI booking voi phien ban moi hon
-
-**File du kien sua:**
-- `web-admin/src/features/booking/components/CreateBookingModal.tsx` — merge noi dung khac biet
-- `web-admin/src/features/booking/components/BookingPage.tsx` — neu can
-- `web-admin/src/features/booking/components/BookingSchedulePage.tsx` — neu can
-
-**Can diff ky truoc khi lam task nay**
-
-**Rui ro:** Trung binh — can diff manual, khong overwrite toan bo
-
----
-
-### T-W1-PORT-13: Port Seeder + Backfill script
-
-**Muc tieu:** Co seed data va script backfill du lieu cu
-
-**File du kien sua (TAO MOI):**
-- `backend/src/seeders/init.seeder.ts`
-- `backend/src/scripts/backfill-cash-payments.ts`
-
-**Dieu kien hoan thanh:**
-- [ ] Seeder chay khong loi (idempotent)
-- [ ] Backfill script chay duoc (chi chay 1 lan tren moi truong thuc)
-
-**Rui ro:** Thap — script doc lap
-
----
-
-### T-W1-PORT-14: Docs bo sung
-
-**Muc tieu:** Cap nhat docs de phan anh cac thay doi
-
-**File du kien sua (TAO MOI):**
-- `docs/08-revenue-module-plan.md` — copy tu QuanLySanCauLong
-- Cap nhat `docs/DATABASE_SCHEMA.dbml` voi Holiday, SystemConfig, payment_method
-
-**Rui ro:** Khong co
-
----
-
-### T-W1-PORT-15: Test build, regression test
-
-**Muc tieu:** Xac nhan toan bo he thong hoat dong sau khi port
-
-**Dieu kien hoan thanh:**
-- [ ] Backend TypeScript compile OK (npx tsc --noEmit)
-- [ ] Web-admin build OK
-- [ ] Manual test tat ca cac checklist o muc 9, 10
-
----
-
-## 8. Thu Tu Uu Tien
-
-```
-Giai doan 1 — Database & Bug Fix (khong them feature moi)
-  T-W1-PORT-0  -> Kiem tra build hien tai
-  T-W1-PORT-1  -> Bug fixes (facility RBAC, court delete, daily-booked route)
-  T-W1-PORT-2  -> Them cot DB (payment_method, membership_type)
-
-Giai doan 2 — Payment Sync (core data integrity)
-  T-W1-PORT-3  -> Payment sync (cash + VNPay)
-  T-W1-PORT-4  -> UserService bo sung
-
-Giai doan 3 — Holiday & SystemConfig (prerequisite cho Pricing)
-  T-W1-PORT-5  -> Holiday + SystemConfig backend
-
-Giai doan 4 — Pricing Strategy (core business logic)
-  T-W1-PORT-6  -> Strategy Pattern pricing
-  T-W1-PORT-7  -> Repository layer (minimal cho Revenue)
-
-Giai doan 5 — Revenue (ket qua hien thi)
-  T-W1-PORT-8  -> Revenue backend
-  T-W1-PORT-9  -> Auth refresh/logout
-
-Giai doan 6 — Frontend
   T-W1-PORT-10 -> Holiday + SystemConfig frontend
   T-W1-PORT-11 -> Revenue frontend
   T-W1-PORT-12 -> Booking UI fixes
@@ -648,15 +293,15 @@ Giai doan 8 — Kiem thu
 
 **Q5.** `auth.service.ts` cua CauLong hien co `refreshAccessToken()` va `logout()` khong? (Neu da co thi T9 chi can port routes/controller).
 
-**Q6.** Khi port Revenue backend (T8), `revenue.service.ts` cua QuanLySanCauLong dung `repositories/revenue.repository.ts`. CauLong hien chua co `repositories/`. Ban muon: (a) port kem repository layer toi thieu, hay (b) viet lai `revenue.service.ts` dung `models.*` truc tiep?
+**Q6.** [ĐÃ QUYẾT ĐỊNH] Không port toàn bộ Repository layer. Chỉ tạo tối thiểu `revenue.repository.ts` riêng nếu query doanh thu quá phức tạp. Các service cũ của booking/court/facility giữ nguyên cách dùng models.* hiện tại.
 
-**Q7.** `features/staff/` trong CauLong hien la mock div. Team dang develop o do khong? Co the them `StaffPage` component tu QuanLySanCauLong khong?
+**Q7.** `features/staff/` trong CauLong hiện là mock div. Team đang phát triển ở đó không? Có thể thêm `StaffPage` component từ QuanLySanCauLong không?
 
-**Q8.** `features/revenue/` trong QuanLySanCauLong dung thu vien chart nao? (Can kiem tra package.json CauLong web-admin de xac nhan da co thu vien do chua.)
+**Q8.** `features/revenue/` trong QuanLySanCauLong dùng thư viện chart nào? (Cần kiểm tra package.json CauLong web-admin để xác nhận đã có thư viện đó chưa.)
 
-**Q9.** Backfill script (T13) can chay tren DB nao? Dev local hay co DB shared cua team?
+**Q9.** Backfill script (T13) cần chạy trên DB nào? Dev local hay có DB shared của team?
 
-**Q10.** Co muon port `redis.ts` config khong? QuanLySanCauLong co nhung khong ro dang dung o dau.
+**Q10.** [ĐÃ QUYẾT ĐỊNH] Redis được phép dùng phục vụ cache cho price_config, system_config, holiday. Không dùng Redis cho mọi thứ một cách mặc định.
 
 ---
 
