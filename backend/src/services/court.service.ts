@@ -2,7 +2,6 @@ import { Op } from "sequelize";
 import models from "../models/index.js";
 import ApiError from "../utils/ErrorClass.js";
 import type { CreateCourtInput, UpdateCourtInput } from "../validations/court.validation.js";
-import { CourtTypeService } from "./courtType.service.js";
 
 export class CourtService {
     static async getAllCourts() {
@@ -70,14 +69,12 @@ export class CourtService {
             }
         });
 
-        const courtTypeId = await CourtTypeService.resolveToId(data.court_type);
-
         if(existingCourt){
             if(!existingCourt.is_active){
                 await existingCourt.update({
                     name: data.name,
                     facility_id: data.facility_id,
-                    court_type: courtTypeId,
+                    court_type: data.court_type,
                     is_active: true
                 });
                 return existingCourt;
@@ -88,7 +85,7 @@ export class CourtService {
         return await models.Court.create({
             name: data.name,
             facility_id: data.facility_id,
-            court_type: courtTypeId,
+            court_type: data.court_type,
             is_active: data.is_active ?? true
         });
     }
@@ -115,12 +112,7 @@ export class CourtService {
             if (duplicateName) throw new ApiError("Tên sân đã bị trùng trong cơ sở này", 400);
         }
 
-        const updateData: any = { ...data };
-        if (data.court_type !== undefined) {
-            updateData.court_type = await CourtTypeService.resolveToId(data.court_type);
-        }
-
-        await court.update(updateData);
+        await court.update(data as any);
         return court;
     }
 
