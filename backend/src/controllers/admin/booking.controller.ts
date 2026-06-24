@@ -85,4 +85,17 @@ export class AdminBookingController {
             next(error);
         }
     }
+
+    static async getDailyBooked(req: Request, res: Response, next: NextFunction) {
+        try {
+            const facilityId = Number(req.query.facility_id);
+            const date = String(req.query.date);
+            const courtType = String(req.query.court_type);
+
+            const result = await BookingService.getDailyBookedSlots(facilityId, date, courtType);
+            return AppResponse.success(res, result, "Lấy lịch đặt sân trong ngày thành công", 200);
+        } catch (error) {
+            next(error);
+        }
+    }
 }

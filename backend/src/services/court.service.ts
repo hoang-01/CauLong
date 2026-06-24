@@ -105,7 +105,7 @@ export class CourtService {
     }
 
     static async deleteCourt(id: number) {
-         const court = await this.getCourtById(id);    
+         const court = await this.getCourtByIdByAdmin(id);    
 
         await court.destroy(); 
         
