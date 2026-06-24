@@ -20,9 +20,9 @@ export class FacilityService {
 
     static async getFacilityById(id: number) {
         const facility = await models.Facility.findOne({
-            where: { id: id,  is_active: true}
+            where: { id: id, is_active: true }
         })
-        if(!facility){
+        if (!facility) {
             throw new ApiError("Không tìm thấy cơ sở này", 404);
         }
 
@@ -31,9 +31,9 @@ export class FacilityService {
 
     static async getFacilityByIdForAdmin(id: number) {
         const facility = await models.Facility.findOne({
-            where: { id: id}
+            where: { id: id }
         })
-        if(!facility){
+        if (!facility) {
             throw new ApiError("Không tìm thấy cơ sở này", 404);
         }
 
@@ -43,9 +43,9 @@ export class FacilityService {
 
     static async getFacilityWithCourts(id: number) {
         const facility = await this.getFacilityById(id);
-        
+
         const courts = await (models.Court as any).findAll({
-            where: { facility_id: id, is_active: true } 
+            where: { facility_id: id, is_active: true }
         });
 
         return {
@@ -64,7 +64,7 @@ export class FacilityService {
         });
 
         const types = courts.map((c: any) => c.court_type);
-        
+
         // Map to full objects with labels if needed, but for now just strings is fine
         // Actually, let's join with CourtType model or return consistent structure
         const allTypes = await models.CourtType.findAll({
@@ -88,13 +88,13 @@ export class FacilityService {
     }
 
     static async updateFacility(id: number, data: updateFacilityInput) {
-        const facility =  await this.getFacilityByIdForAdmin(id);
-        
+        const facility = await this.getFacilityByIdForAdmin(id);
+
         if (data.name && data.name !== facility.name) {
             const duplicateName = await models.Facility.findOne({
                 where: {
                     name: data.name,
-                    id: { [Op.ne]: id } 
+                    id: { [Op.ne]: id }
                 }
             });
 
@@ -107,17 +107,17 @@ export class FacilityService {
     }
 
     static async deleteFacility(id: number) {
-        const facility = await this.getFacilityById(id);    
+        const facility = await this.getFacilityById(id);
 
-        await facility.destroy(); 
-        
+        await facility.destroy();
+
         return { message: 'Đã xóa (mềm) cơ sở thành công' };
     }
 
     static async restoreFacility(id: number) {
         const facility = await models.Facility.findOne({
             where: { id: id },
-            paranoid: false 
+            paranoid: false
         });
 
         if (!facility) {
@@ -125,13 +125,13 @@ export class FacilityService {
         }
 
         await facility.restore();
-        
+
         return { message: 'Đã khôi phục cơ sở thành công' };
     }
 
     static async getDeletedFacilities() {
         return await models.Facility.findAll({
-            where: { deleted_at: { [Op.not]: null as any  } },
+            where: { deleted_at: { [Op.not]: null as any } },
             paranoid: false, // Bắt buộc phải có để nhìn xuyên thùng rác
             order: [['deleted_at', 'DESC']]
         });

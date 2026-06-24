@@ -10,13 +10,14 @@ const router = Router();
 router.get('/', verifyToken, ClientBookingController.getMyBookings);
 router.get('/availability', validate(checkAvailabilitySchema), ClientBookingController.checkAvailability);
 router.get('/booked-slots', validate(getDailyBookedSchema), ClientBookingController.getDailyBooked);
+router.get('/daily-booked-slots', validate(getDailyBookedSchema), ClientBookingController.getDailyBooked);
 router.post('/price-preview', validate(previewPriceSchema), ClientBookingController.previewPrice);
 
 router.post(
-    '/', 
-    verifyToken, 
-    requireRoles(['customer']), 
-    validate(createBookingSchema), 
+    '/',
+    verifyToken,
+    requireRoles(['customer']),
+    validate(createBookingSchema),
     ClientBookingController.createBooking
 );
 
