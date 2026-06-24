@@ -12,9 +12,7 @@ import PriceConfigPage from '../features/priceConfig/components/PriceConfigPage'
 import OrderPage from '../features/sale/components/OrderPage';
 import HolidayPage from '../features/holiday/components/HolidayPage';
 import SystemConfigPage from '../features/systemConfig/components/SystemConfigPage';
-
-// --- TẠM THỜI MOCK CÁC COMPONENT ĐỂ TEST UI ---
-const DashboardPage = () => <div className="p-4 font-semibold text-lg text-gray-700">Trang Tổng quan (Thống kê doanh thu)</div>;
+import RevenuePage from '../features/revenue/components/RevenuePage';
 
 export const router = createBrowserRouter([
   {
@@ -27,7 +25,11 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true, // Tương đương path: '/'
-        element: <DashboardPage />,
+        element: <RevenuePage />,
+      },
+      {
+        path: 'revenue',
+        element: <RevenuePage />,
       },
       
       // 1. NHÓM QUẢN LÝ ĐẶT SÂN
