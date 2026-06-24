@@ -44,8 +44,8 @@ Notification.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 Facility.hasMany(Court, { foreignKey: 'facility_id', as: 'courts' });
 Court.belongsTo(Facility, { foreignKey: 'facility_id', as: 'facility' });
 
-CourtType.hasMany(Court, { foreignKey: 'court_type', as: 'courts' });
-Court.belongsTo(CourtType, { foreignKey: 'court_type', as: 'type_info' });
+CourtType.hasMany(Court, { foreignKey: 'court_type', sourceKey: 'name', as: 'courts' });
+Court.belongsTo(CourtType, { foreignKey: 'court_type', targetKey: 'name', as: 'type_info' });
 
 
 

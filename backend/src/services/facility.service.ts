@@ -83,7 +83,7 @@ export class FacilityService {
         const typeIds = courts.map((c: any) => c.court_type);
 
         return await models.CourtType.findAll({
-            where: { id: { [Op.in]: typeIds } },
+            where: { name: { [Op.in]: typeIds } },
             order: [['id', 'ASC']],
         });
     }
