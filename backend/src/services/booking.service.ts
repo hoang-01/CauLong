@@ -213,7 +213,8 @@ export class BookingService {
             data.facility_id,
             court.court_type,
             startDateTime,
-            endDateTime
+            endDateTime,
+            userId
         );
 
         const t = await sequelize.transaction();
