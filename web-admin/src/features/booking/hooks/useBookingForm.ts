@@ -21,6 +21,9 @@ interface UseBookingFormProps {
     court_id?: number;
     play_date?: dayjs.Dayjs | string;
     start_time?: string;
+    open_time?: string;
+    close_time?: string;
+    min_gap_minutes?: number;
   } | null;
 }
 
@@ -43,6 +46,14 @@ export const useBookingForm = ({ open, onSuccess, onClose, initialData }: UseBoo
   const [facilityCourts, setFacilityCourts] = useState<CourtLite[]>([]);
   const [availableCourtTypes, setAvailableCourtTypes] = useState<string[]>([]);
   const [courts, setCourts] = useState<CourtLite[]>([]);
+  
+  const [operatingHours, setOperatingHours] = useState<{
+    open_time: string;
+    close_time: string;
+  }>({
+    open_time: '06:00:00',
+    close_time: '22:00:00'
+  });
 
   const isInitialMountRef = useRef(false);
 
@@ -78,8 +89,26 @@ export const useBookingForm = ({ open, onSuccess, onClose, initialData }: UseBoo
             start_time: startTimeVal,
             end_time: endTimeVal
          });
-      } else if (staffFacilityId) {
-        form.setFieldValue('facility_id', staffFacilityId);
+         
+         if (initialData.open_time && initialData.close_time) {
+           setOperatingHours({
+             open_time: initialData.open_time,
+             close_time: initialData.close_time
+           });
+         } else {
+           setOperatingHours({
+             open_time: '06:00:00',
+             close_time: '22:00:00'
+           });
+         }
+      } else {
+         setOperatingHours({
+           open_time: '06:00:00',
+           close_time: '22:00:00'
+         });
+         if (staffFacilityId) {
+           form.setFieldValue('facility_id', staffFacilityId);
+         }
       }
 
       setTimeout(() => {
@@ -144,10 +173,18 @@ export const useBookingForm = ({ open, onSuccess, onClose, initialData }: UseBoo
           const res = await BookingService.getDailySlots(selectedFacilityId, dateStr, selectedCourtType); 
           
           // --- ADMIN CHỈ LẤY ĐÚNG RAW DATA, BỎ QUA CÁI GRID CỦA APP ---
-          if (res.data && res.data.rawBookedSlots) {
-            setBookedSlots(res.data.rawBookedSlots);
-          } else {
-            setBookedSlots([]); 
+          if (res.data) {
+            if (res.data.rawBookedSlots) {
+              setBookedSlots(res.data.rawBookedSlots);
+            } else {
+              setBookedSlots([]); 
+            }
+            if (res.data.open_time && res.data.close_time) {
+              setOperatingHours({
+                open_time: res.data.open_time,
+                close_time: res.data.close_time
+              });
+            }
           }
           
         } catch (error) {
@@ -197,21 +234,86 @@ export const useBookingForm = ({ open, onSuccess, onClose, initialData }: UseBoo
     }
   };
 
-  const checkOverlappingTime = (_: any, value: any) => {
-    if (!value || !selectedCourtId || currentCourtBookedSlots.length === 0) return Promise.resolve();
+  const checkBookingTimes = (_: any, value: any) => {
+    if (!value) return Promise.resolve();
     
     const startTimeVal = form.getFieldValue('start_time');
     const endTimeVal = form.getFieldValue('end_time');
     if (!startTimeVal || !endTimeVal) return Promise.resolve();
 
-    const start = dayjs(startTimeVal).format('HH:mm');
-    const end = dayjs(endTimeVal).format('HH:mm');
+    // 1. Duration check
+    const start = dayjs(startTimeVal);
+    const end = dayjs(endTimeVal);
+    
+    if (end.isBefore(start) || end.isSame(start)) {
+      return Promise.reject(new Error('Giờ kết thúc phải lớn hơn giờ bắt đầu!'));
+    }
 
-    const isOverlap = currentCourtBookedSlots.some(slot => {
-      return (start < slot.end_time && end > slot.start_time);
-    });
+    const durationMinutes = end.diff(start, 'minute');
+    if (durationMinutes < 60) {
+      return Promise.reject(new Error('Thời lượng đặt sân tối thiểu là 1 tiếng (60 phút)!'));
+    }
 
-    if (isOverlap) return Promise.reject(new Error('Khung giờ này đã bị trùng khách khác!'));
+    // 2. Operating hours check
+    const openStr = operatingHours.open_time.slice(0, 5); // e.g. "06:00"
+    const closeStr = operatingHours.close_time.slice(0, 5); // e.g. "22:00"
+    
+    const startStr = start.format('HH:mm');
+    const endStr = end.format('HH:mm');
+    
+    if (startStr < openStr || endStr > closeStr) {
+      return Promise.reject(new Error(`Giờ đặt sân phải nằm trong giờ hoạt động (${openStr} - ${closeStr})!`));
+    }
+
+    // 3. Overlap check
+    if (selectedCourtId && currentCourtBookedSlots.length > 0) {
+      const isOverlap = currentCourtBookedSlots.some(slot => {
+        return (startStr < slot.end_time && endStr > slot.start_time);
+      });
+      if (isOverlap) {
+        return Promise.reject(new Error('Khung giờ này đã bị trùng khách khác!'));
+      }
+
+      // 4. Smart Gap client check (as a warning / soft block)
+      // Get all booked slots sorted by start time
+      const sortedSlots = [...currentCourtBookedSlots].sort((a, b) => a.start_time.localeCompare(b.start_time));
+      
+      // Find adjacent booking before
+      const previousSlot = [...sortedSlots].reverse().find(s => s.end_time <= startStr);
+      let gapBeforeBoundary = openStr;
+      if (previousSlot) {
+        gapBeforeBoundary = previousSlot.end_time;
+      }
+      
+      const gapBefore = start.diff(dayjs(`${start.format('YYYY-MM-DD')} ${gapBeforeBoundary}`, 'YYYY-MM-DD HH:mm'), 'minute');
+      if (gapBefore > 0 && gapBefore < 60) {
+        return Promise.reject(new Error(`Sẽ tạo ra khoảng trống ${gapBefore} phút (từ ${gapBeforeBoundary} đến ${startStr}) không đủ để người khác thuê!`));
+      }
+
+      // Find adjacent booking after
+      const nextSlot = sortedSlots.find(s => s.start_time >= endStr);
+      let gapAfterBoundary = closeStr;
+      if (nextSlot) {
+        gapAfterBoundary = nextSlot.start_time;
+      }
+      
+      const gapAfter = dayjs(`${end.format('YYYY-MM-DD')} ${gapAfterBoundary}`, 'YYYY-MM-DD HH:mm').diff(end, 'minute');
+      if (gapAfter > 0 && gapAfter < 60) {
+        return Promise.reject(new Error(`Sẽ tạo ra khoảng trống ${gapAfter} phút (từ ${endStr} đến ${gapAfterBoundary}) không đủ để người khác thuê!`));
+      }
+    } else {
+      // If there are no bookings, we check gap with opening/closing bounds
+      const gapBefore = start.diff(dayjs(`${start.format('YYYY-MM-DD')} ${openStr}`, 'YYYY-MM-DD HH:mm'), 'minute');
+      if (gapBefore > 0 && gapBefore < 60) {
+        return Promise.reject(new Error(`Sẽ tạo ra khoảng trống ${gapBefore} phút (từ ${openStr} đến ${startStr}) không đủ để người khác thuê!`));
+      }
+
+      const gapAfter = dayjs(`${end.format('YYYY-MM-DD')} ${closeStr}`, 'YYYY-MM-DD HH:mm').diff(end, 'minute');
+      if (gapAfter > 0 && gapAfter < 60) {
+        return Promise.reject(new Error(`Sẽ tạo ra khoảng trống ${gapAfter} phút (từ ${endStr} đến ${closeStr}) không đủ để người khác thuê!`));
+      }
+    }
+
     return Promise.resolve();
   };
 
@@ -259,7 +361,7 @@ export const useBookingForm = ({ open, onSuccess, onClose, initialData }: UseBoo
     selectedCourtType,
     currentCourtBookedSlots,
     handleSearchPhone,
-    checkOverlappingTime,
+    checkBookingTimes,
     handleSubmit
   };
 };

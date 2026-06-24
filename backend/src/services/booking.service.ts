@@ -99,7 +99,16 @@ export class BookingService {
     }
 
     static async getDailyBookedSlots(facilityId: number, date: string, courtType: string) {
-        // 1. Lấy danh sách sân của cơ sở và loại sân này
+        // 1. Lấy thông tin cơ sở để lấy giờ hoạt động
+        const facility = await models.Facility.findOne({
+            where: { id: facilityId, is_active: true }
+        });
+        const open_time = facility?.open_time || '06:00:00';
+        const close_time = facility?.close_time || '22:00:00';
+        const START_HOUR = parseInt(open_time.split(':')[0]) || 6;
+        const END_HOUR = parseInt(close_time.split(':')[0]) || 22;
+
+        // 2. Lấy danh sách sân của cơ sở và loại sân này
         const courts = await models.Court.findAll({
             where: {
                 facility_id: facilityId,
@@ -111,10 +120,18 @@ export class BookingService {
         });
 
         if (courts.length === 0) {
-            return { courts: [], slotsByCourtId: {} };
+            return {
+                courts: [],
+                slotsByCourtId: {},
+                rawBookedSlots: [],
+                open_time,
+                close_time,
+                min_booking_minutes: 60,
+                min_gap_minutes: 60
+            };
         }
 
-        // 2. Lấy tất cả các slot đã đặt trong ngày đó cho các sân này
+        // 3. Lấy tất cả các slot đã đặt trong ngày đó cho các sân này
         const startOfDay = dayjs(date).startOf('day').toDate();
         const endOfDay = dayjs(date).endOf('day').toDate();
 
@@ -136,7 +153,7 @@ export class BookingService {
             raw: true
         });
 
-        // 3. Lấy cấu hình giá để tính giá cho từng slot
+        // 4. Lấy cấu hình giá để tính giá cho từng slot
         const priceConfigs = await models.PriceConfig.findAll({
             where: {
                 facility_id: facilityId,
@@ -145,9 +162,7 @@ export class BookingService {
             raw: true
         });
 
-        // 4. Tạo Grid giờ (06:00 - 22:00, bước nhảy 1 tiếng)
-        const START_HOUR = 6;
-        const END_HOUR = 22;
+        // 5. Tạo Grid giờ động theo facility
         const slotsByCourtId: Record<number, any[]> = {};
 
         courts.forEach(court => {
@@ -190,13 +205,46 @@ export class BookingService {
         return {
             courts,
             slotsByCourtId,
-            rawBookedSlots: rawSlots
+            rawBookedSlots: rawSlots,
+            open_time,
+            close_time,
+            min_booking_minutes: 60,
+            min_gap_minutes: 60
         };
     }
 
     static async createBooking(userId: number, data: CreateBookingInput) {
         const startDateTime = dayjs(`${data.date} ${data.start_time}`, 'YYYY-MM-DD HH:mm').toDate();
         const endDateTime = dayjs(`${data.date} ${data.end_time}`, 'YYYY-MM-DD HH:mm').toDate();
+
+        const facility = await models.Facility.findOne({
+            where: { id: data.facility_id, is_active: true }
+        });
+
+        if (!facility) {
+            throw new ApiError('Cơ sở không tồn tại hoặc tạm đóng cửa!', 404);
+        }
+
+        const open_time = facility.open_time || '06:00:00';
+        const close_time = facility.close_time || '22:00:00';
+        const openDateTime = dayjs(`${data.date} ${open_time.slice(0, 5)}`, 'YYYY-MM-DD HH:mm');
+        const closeDateTime = dayjs(`${data.date} ${close_time.slice(0, 5)}`, 'YYYY-MM-DD HH:mm');
+        const start = dayjs(startDateTime);
+        const end = dayjs(endDateTime);
+
+        // 1. Chặn booking ngoài giờ hoạt động
+        if (start.isBefore(openDateTime) || end.isAfter(closeDateTime)) {
+            throw new ApiError(
+                `Thời gian đặt sân phải nằm trong giờ hoạt động của cơ sở (${open_time.slice(0, 5)} - ${close_time.slice(0, 5)})`,
+                400
+            );
+        }
+
+        // 2. Chặn booking có duration < 60 phút
+        const durationMinutes = end.diff(start, 'minute');
+        if (durationMinutes < 60) {
+            throw new ApiError('Thời lượng đặt sân tối thiểu là 1 tiếng (60 phút)', 400);
+        }
 
         const court = await models.Court.findOne({
             where: { id: data.court_id, is_active: true }
@@ -228,6 +276,12 @@ export class BookingService {
                         { end_at: { [Op.gt]: startDateTime } }
                     ]
                 },
+                include: [{
+                    model: models.Booking,
+                    as: 'booking',
+                    where: { status: { [Op.ne]: 'cancelled' } },
+                    attributes: []
+                }],
                 transaction: t,
                 lock: t.LOCK.UPDATE
             });
@@ -241,19 +295,30 @@ export class BookingService {
                     court_id: data.court_id,
                     end_at: { [Op.lte]: startDateTime }
                 },
+                include: [{
+                    model: models.Booking,
+                    as: 'booking',
+                    where: { status: { [Op.ne]: 'cancelled' } },
+                    attributes: []
+                }],
                 order: [['end_at', 'DESC']],
                 transaction: t
             });
 
+            let gapBeforeBoundary = openDateTime;
             if (previousBooking) {
-                const gapBefore = dayjs(startDateTime).diff(dayjs(previousBooking.end_at), 'minute');
-
-                if (gapBefore > 0 && gapBefore < MIN_DURATION_MINUTES) {
-                    throw new ApiError(
-                        `Không thể đặt! Sẽ tạo ra khoảng trống ${gapBefore} phút (từ ${dayjs(previousBooking.end_at).format('HH:mm')} đến ${dayjs(startDateTime).format('HH:mm')}) không đủ để người khác thuê.`,
-                        400
-                    );
+                const prevEnd = dayjs(previousBooking.end_at);
+                if (prevEnd.isAfter(openDateTime)) {
+                    gapBeforeBoundary = prevEnd;
                 }
+            }
+
+            const gapBefore = start.diff(gapBeforeBoundary, 'minute');
+            if (gapBefore > 0 && gapBefore < MIN_DURATION_MINUTES) {
+                throw new ApiError(
+                    `Không thể đặt! Sẽ tạo ra khoảng trống ${gapBefore} phút (từ ${gapBeforeBoundary.format('HH:mm')} đến ${start.format('HH:mm')}) không đủ để người khác thuê.`,
+                    400
+                );
             }
 
             const nextBooking = await models.BookingSlot.findOne({
@@ -261,19 +326,30 @@ export class BookingService {
                     court_id: data.court_id,
                     start_at: { [Op.gte]: endDateTime }
                 },
+                include: [{
+                    model: models.Booking,
+                    as: 'booking',
+                    where: { status: { [Op.ne]: 'cancelled' } },
+                    attributes: []
+                }],
                 order: [['start_at', 'ASC']],
                 transaction: t
             });
 
+            let gapAfterBoundary = closeDateTime;
             if (nextBooking) {
-                const gapAfter = dayjs(nextBooking.start_at).diff(dayjs(endDateTime), 'minute');
-
-                if (gapAfter > 0 && gapAfter < MIN_DURATION_MINUTES) {
-                    throw new ApiError(
-                        `Không thể đặt! Sẽ tạo ra khoảng trống ${gapAfter} phút (từ ${dayjs(endDateTime).format('HH:mm')} đến ${dayjs(nextBooking.start_at).format('HH:mm')}) không đủ để người khác thuê.`,
-                        400
-                    );
+                const nextStart = dayjs(nextBooking.start_at);
+                if (nextStart.isBefore(closeDateTime)) {
+                    gapAfterBoundary = nextStart;
                 }
+            }
+
+            const gapAfter = gapAfterBoundary.diff(end, 'minute');
+            if (gapAfter > 0 && gapAfter < MIN_DURATION_MINUTES) {
+                throw new ApiError(
+                    `Không thể đặt! Sẽ tạo ra khoảng trống ${gapAfter} phút (từ ${end.format('HH:mm')} đến ${gapAfterBoundary.format('HH:mm')}) không đủ để người khác thuê.`,
+                    400
+                );
             }
 
             const newBooking = await models.Booking.create({

@@ -89,6 +89,10 @@ export interface DailySlotGridResponse {
     price_cents: number;
   }[]>;
   rawBookedSlots: BookedSlotDTO[];
+  open_time?: string;
+  close_time?: string;
+  min_booking_minutes?: number;
+  min_gap_minutes?: number;
 }
 
 export interface FacilityLite {

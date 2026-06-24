@@ -21,7 +21,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({ open, onClose, 
   const {
     form, loading, searchingPhone, isExistingUser, foundCustomer, facilities, availableCourtTypes, courts,
     staffFacilityId, selectedCourtId, selectedCourtType, selectedDate, selectedFacilityId,
-    currentCourtBookedSlots, handleSearchPhone, checkOverlappingTime, handleSubmit
+    currentCourtBookedSlots, handleSearchPhone, checkBookingTimes, handleSubmit
   } = useBookingForm({ open, onSuccess, onClose, initialData });
 
   const formatCourtTypeLabel = (type: string) => {
@@ -158,8 +158,8 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({ open, onClose, 
         <Row gutter={16}>
           <Col span={12}>
             <Form.Item 
-              label="Giờ bắt đầu" name="start_time"
-              rules={[{ required: true, message: 'Chọn giờ bắt đầu!' }, { validator: checkOverlappingTime }]}
+              label="Giờ bắt đầu" name="start_time" dependencies={['end_time']}
+              rules={[{ required: true, message: 'Chọn giờ bắt đầu!' }, { validator: checkBookingTimes }]}
             >
               <TimePicker className="w-full" format="HH:mm" minuteStep={15} />
             </Form.Item>
@@ -167,16 +167,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({ open, onClose, 
           <Col span={12}>
             <Form.Item 
               label="Giờ kết thúc" name="end_time" dependencies={['start_time']}
-              rules={[
-                { required: true, message: 'Chọn giờ kết thúc!' },
-                { validator: checkOverlappingTime },
-                ({ getFieldValue }) => ({
-                  validator(_, value) {
-                    if (!value || getFieldValue('start_time') < value) return Promise.resolve();
-                    return Promise.reject(new Error('Giờ kết thúc phải lớn hơn giờ bắt đầu!'));
-                  },
-                }),
-              ]}
+              rules={[{ required: true, message: 'Chọn giờ kết thúc!' }, { validator: checkBookingTimes }]}
             >
               <TimePicker className="w-full" format="HH:mm" minuteStep={15} />
             </Form.Item>
