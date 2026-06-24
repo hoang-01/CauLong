@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import models from "../models/index.js";
 import ApiError from "../utils/ErrorClass.js";
 import type { CreateCourtInput, UpdateCourtInput } from "../validations/court.validation.js";
+import { CourtTypeService } from "./courtType.service.js";
 
 export class CourtService {
     static async getAllCourts() {
@@ -67,15 +68,28 @@ export class CourtService {
                 facility_id: data.facility_id
             }
         });
+
+        const courtTypeId = await CourtTypeService.resolveToId(data.court_type);
+
         if(existingCourt){
             if(existingCourt.is_active){
-                await existingCourt.update({ ...data, is_active: true});
+                await existingCourt.update({
+                    name: data.name,
+                    facility_id: data.facility_id,
+                    court_type: courtTypeId,
+                    is_active: true
+                });
                 return existingCourt;
             }
             throw new ApiError(`Tên sân '${data.name}' đã tồn tại trong cơ sở này`, 400);
         }
 
-        return await models.Court.create(data);
+        return await models.Court.create({
+            name: data.name,
+            facility_id: data.facility_id,
+            court_type: courtTypeId,
+            is_active: data.is_active ?? true
+        });
     }
 
     static async updateCourt(id: number, data: UpdateCourtInput) {
@@ -100,7 +114,12 @@ export class CourtService {
             if (duplicateName) throw new ApiError("Tên sân đã bị trùng trong cơ sở này", 400);
         }
 
-        await court.update(data as any);
+        const updateData: any = { ...data };
+        if (data.court_type !== undefined) {
+            updateData.court_type = await CourtTypeService.resolveToId(data.court_type);
+        }
+
+        await court.update(updateData);
         return court;
     }
 
