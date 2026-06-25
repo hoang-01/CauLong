@@ -7,12 +7,9 @@ import ApiError from '../utils/ErrorClass.js';
 import { BOOKING_STATUS_TRANSITIONS, PAYMENT_STATUS_TRANSITIONS } from '../constants/booking.constant.js';
 import { PricingService } from './pricing.service.js';
 import { VNPayUtils } from '../utils/vnpay.js';
-import { getCourtTypeLabel } from '../constants/courtType.constant.js';
-import { CourtTypeService } from './courtType.service.js';
-import { courtTypeInclude } from '../constants/courtInclude.constant.js';
 
 export class BookingService {
-    static async getAvailableCourts(facilityId: number, startDateTime: Date, endDateTime: Date, courtTypeId?: number) {
+    static async getAvailableCourts(facilityId: number, startDateTime: Date, endDateTime: Date, courtType?: string) {
 
         const bookedSlots = await models.BookingSlot.findAll({
             where: {
@@ -39,29 +36,27 @@ export class BookingService {
             is_active: true
         };
 
-        if (courtTypeId) {
-            whereCondition.court_type = courtTypeId;
+        if (courtType) {
+            whereCondition.court_type = courtType;
         }
 
+
+        // 2. Lấy danh sách sân của cơ sở
         const allCourtsOfThisType = await models.Court.findAll({
-            where: { facility_id: facilityId, court_type: courtTypeId, is_active: true }
+            where: { facility_id: facilityId, court_type: courtType, is_active: true }
         });
 
         if (allCourtsOfThisType.length === 0) {
-            const typeName = courtTypeId ? await CourtTypeService.getNameById(courtTypeId).catch(() => '') : '';
-            throw new ApiError(`Cơ sở này hiện không có sân ${getCourtTypeLabel(typeName) || 'này'}.`, 404);
+            throw new ApiError(`Cơ sở này hiện không có sân ${courtType === 'badminton' ? 'cầu lông' : courtType} nào.`, 404);
         }
 
         const availableCourts = await models.Court.findAll({
             where: whereCondition,
-            include: [
-                {
-                    model: models.Facility,
-                    as: 'facility',
-                    attributes: ['id', 'name', 'address']
-                },
-                courtTypeInclude,
-            ]
+            include: [{
+                model: models.Facility,
+                as: 'facility',
+                attributes: ['id', 'name', 'address']
+            }]
         });
 
         if (availableCourts.length === 0) {
@@ -102,18 +97,16 @@ export class BookingService {
         return validResults;
     }
 
-    static async getDailyBookedSlots(facilityId: number, date: string, courtType: string | number) {
-        const courtTypeId = await CourtTypeService.resolveToId(courtType);
-        const courtTypeRecord = await CourtTypeService.getById(courtTypeId);
-
+    static async getDailyBookedSlots(facilityId: number, date: string, courtType: string) {
+        // 1. Lấy danh sách sân của cơ sở và loại sân này
         const courts = await models.Court.findAll({
             where: {
                 facility_id: facilityId,
-                court_type: courtTypeId,
+                court_type: courtType,
                 is_active: true
             },
             attributes: ['id', 'name', 'court_type', 'facility_id'],
-            include: [courtTypeInclude],
+            raw: true
         });
 
         if (courts.length === 0) {
@@ -146,7 +139,7 @@ export class BookingService {
         const priceConfigs = await models.PriceConfig.findAll({
             where: {
                 facility_id: facilityId,
-                court_type: courtTypeRecord.name
+                court_type: courtType
             },
             raw: true
         });
@@ -194,7 +187,7 @@ export class BookingService {
         }));
 
         return {
-            courts: courts.map((court) => court.toJSON()),
+            courts,
             slotsByCourtId,
             rawBookedSlots: rawSlots
         };
@@ -324,8 +317,7 @@ export class BookingService {
                     include: [
                         {
                             model: models.Court,
-                            as: 'court',
-                            include: [courtTypeInclude],
+                            as: 'court'
                         }
                     ]
                 }
@@ -556,8 +548,7 @@ export class BookingService {
                     include: [
                         { 
                             model: models.Court, 
-                            as: 'court',
-                            include: [courtTypeInclude],
+                            as: 'court'
                         }
                     ]
                 }

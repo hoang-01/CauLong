@@ -1,23 +1,19 @@
 import dayjs from 'dayjs';
 import ApiError from '../utils/ErrorClass.js';
 import models from '../models/index.js';
-import { CourtTypeService } from './courtType.service.js';
+import { Op } from 'sequelize';
 
 export class PricingService {
-    static async calculateTotalPrice(facilityId: number, courtType: string | number, startDateTime: Date, endDateTime: Date) {
+    static async calculateTotalPrice(facilityId: number, courtType: string, startDateTime: Date, endDateTime: Date) {
         const diffInMinutes = dayjs(endDateTime).diff(dayjs(startDateTime), 'minute');
         if (diffInMinutes <= 0) {
             throw new ApiError('Thời gian đặt sân không hợp lệ', 400);
         }
 
-        const courtTypeName = typeof courtType === 'number'
-            ? await CourtTypeService.getNameById(courtType)
-            : courtType;
-
         const configs = await models.PriceConfig.findAll({
             where: {
                 facility_id: facilityId,
-                court_type: courtTypeName
+                court_type: courtType
             }
         });
 
