@@ -79,3 +79,17 @@ export const clientUpdateBookingSchema = z.object({
     })
 });
 export type ClientUpdateBookingInput = z.infer<typeof clientUpdateBookingSchema>['body'];
+
+export const createBatchBookingSchema = z.object({
+    body: z.object({
+        bookings: z.array(z.object({
+            facility_id: z.number({ message: 'ID cơ sở là bắt buộc' }),
+            court_id: z.number({ message: 'ID sân là bắt buộc' }),
+            date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày phải là YYYY-MM-DD'),
+            start_time: z.string().regex(/^\d{2}:(00|30)$/, 'Giờ bắt đầu phải chẵn giờ hoặc rưỡi'),
+            end_time: z.string().regex(/^\d{2}:(00|30)$/, 'Giờ kết thúc phải chẵn giờ hoặc rưỡi'),
+            payment_method: z.enum(['cash', 'vnpay']).default('cash'),
+        })).min(1, 'Cần ít nhất 1 booking'),
+    })
+});
+export type CreateBatchBookingInput = z.infer<typeof createBatchBookingSchema>['body'];

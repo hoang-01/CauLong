@@ -110,6 +110,48 @@ export async function getProducts(facilityId) {
   }
 }
 
+/** Chuyển "HH:mm" thành số phút */
+function timeToMins(t) {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/** Chuyển số phút thành "HH:mm" */
+function minsToTime(mins) {
+  return `${Math.floor(mins / 60).toString().padStart(2, '0')}:${(mins % 60).toString().padStart(2, '0')}`;
+}
+
+/** Chia mỗi slot (bất kể dài bao nhiêu) thành các sub-slot 30 phút */
+function splitToHalfHourSlots(slots) {
+  const result = [];
+  for (const slot of (slots || [])) {
+    const startMins = timeToMins(slot.start);
+    const endMins = timeToMins(slot.end);
+    for (let t = startMins; t < endMins; t += 30) {
+      result.push({ ...slot, start: minsToTime(t), end: minsToTime(t + 30) });
+    }
+  }
+  return result;
+}
+
+export async function getDailyAvailability({ facilityId, date, courtType }) {
+    try {
+        const data = await api.fetchAvailability(facilityId, date, courtType);
+        if (data?.slotsByCourtId) {
+          const halfHourSlots = {};
+          for (const [courtId, slots] of Object.entries(data.slotsByCourtId)) {
+            halfHourSlots[courtId] = splitToHalfHourSlots(slots);
+          }
+          return { ...data, slotsByCourtId: halfHourSlots };
+        }
+        return data || { courts: [], slotsByCourtId: {} };
+    } catch (error) {
+        console.error("Lỗi lấy lịch trống trong ngày:", error);
+        return { courts: [], slotsByCourtId: {} };
+    }
+}
+
+
 export async function getAvailableCourts({ facilityId, courtType, date, startTime, endTime }) {
     try {
         return await api.fetchCheckAvailability({
